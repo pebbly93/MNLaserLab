@@ -61,6 +61,60 @@ def inventory():
 @app.post("/api/purchase")
 def purchase(payload: Payload): return mutate(add_purchase, payload.data)
 
+@app.get("/api/purchase-history")
+def purchase_history_api():
+    db = load_db()
+    rows = db.get("purchase_history", [])
+    if not isinstance(rows, list):
+        return []
+    return list(reversed(rows))
+
+
+@app.get("/api/inventory/active")
+def active_inventory():
+    db = load_db()
+    return [
+        x
+        for x in aggregated_raw_items(db, operational_only=True)
+        if x.get("usable_in_quote")
+    ]
+
+
+@app.get("/api/inventory/quality")
+def inventory_quality():
+    db = load_db()
+    rows = aggregated_raw_items(db)
+
+    counters = {
+        "total": len(rows),
+        "active": 0,
+        "never_purchased": 0,
+        "to_check": 0,
+        "out_of_stock": 0,
+        "low_stock": 0,
+        "real_value": 0.0,
+    }
+
+    for row in rows:
+        status = row.get("inventory_status")
+
+        if status == "attivo":
+            counters["active"] += 1
+        elif status == "mai_acquistato":
+            counters["never_purchased"] += 1
+        elif status == "da_verificare":
+            counters["to_check"] += 1
+        elif status == "esaurito":
+            counters["out_of_stock"] += 1
+        elif status == "sotto_scorta":
+            counters["low_stock"] += 1
+
+        if row.get("usable_in_quote"):
+            counters["real_value"] += parse_float(row.get("value"))
+
+    counters["real_value"] = round(counters["real_value"], 2)
+    return counters
+
 @app.put("/api/raw/{table}/{key:path}")
 def update_raw(table: str, key: str, payload: Payload):
     def fn(db):
