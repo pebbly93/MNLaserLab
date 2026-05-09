@@ -1,0 +1,84 @@
+name: Build Windows setup
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build React frontend
+        shell: pwsh
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Build FastAPI backend executable
+        shell: pwsh
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+          pyinstaller MN_Laser_Lab_Backend.spec --clean --noconfirm
+
+      - name: Prepare Electron resources
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force desktop/resources/backend | Out-Null
+          New-Item -ItemType Directory -Force desktop/resources/frontend | Out-Null
+          Copy-Item backend/dist/MN_Laser_Lab_Backend.exe desktop/resources/backend/MN_Laser_Lab_Backend.exe -Force
+          Copy-Item frontend/dist/* desktop/resources/frontend -Recurse -Force
+
+      - name: Build Electron installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd desktop
+          npm ci
+          npm run dist:win -- --publish never
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MN-Laser-Lab-Manager-Windows-Setup
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.blockmap
+            desktop/release/latest.yml
+
+      - name: Publish GitHub Release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/release/*.exe
+            desktop/release/*.blockmap
+            desktop/release/latest.yml
+          generate_release_notes: true

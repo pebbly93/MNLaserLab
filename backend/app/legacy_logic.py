@@ -1,0 +1,809 @@
+from __future__ import annotations
+
+import copy
+import json
+import os
+import shutil
+import sqlite3
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any
+
+APP_NAME = "MN Laser Lab Manager"
+DB_FILE = "mn_laser_lab.db"
+LEGACY_JSON_FILE = "laser_db.json"
+
+
+def parse_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(str(value).replace(",", ".").strip())
+    except Exception:
+        return default
+
+
+def euro(value: Any) -> str:
+    return f"{parse_float(value):.2f} €"
+
+
+def now_str() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def today_str() -> str:
+    return date.today().strftime("%d-%m-%Y")
+
+
+def normalize_date(value: Any) -> str:
+    if not value:
+        return ""
+    s = str(value).strip()
+    if " " in s:
+        s = s.split(" ")[0]
+    for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%d-%m-%Y")
+        except Exception:
+            pass
+    return s
+
+
+def date_parts(value: Any):
+    try:
+        d, m, y = normalize_date(value).split("-")
+        return d, m, y
+    except Exception:
+        return "", "", ""
+
+
+def date_parts_match(value: Any, day="", month="", year="") -> bool:
+    d, m, y = date_parts(value)
+    return (not day or d == day) and (not month or m == month) and (not year or y == year)
+
+
+def hours_minutes_to_decimal(hours_value=0, minutes_value=0) -> float:
+    return max(0.0, parse_float(hours_value)) + max(0.0, parse_float(minutes_value)) / 60.0
+
+
+def decimal_hours_to_hours_minutes(value):
+    total = int(round(parse_float(value) * 60))
+    return total // 60, total % 60
+
+
+def user_data_dir() -> Path:
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        path = Path(base) / APP_NAME
+    else:
+        path = Path.home() / ".mn_laser_lab_manager"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def db_path() -> Path:
+    return user_data_dir() / DB_FILE
+
+
+def legacy_json_path() -> Path:
+    return user_data_dir() / LEGACY_JSON_FILE
+
+
+def connect():
+    conn = sqlite3.connect(db_path())
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
+
+def default_categories():
+    return {
+        "materials": {"Legname": ["Betulla", "Pioppo", "MDF", "Multistrato"], "Acrilico": ["Rosso", "Nero", "Giallo", "Blu", "Verde", "Bianco", "Trasparente", "Arancio"]},
+        "components": {"Attrezzature": ["Pennelli", "Rulli"], "Vernici": ["Smalti", "Acrilici", "Acqua"], "Finiture": ["Flatting", "Cera", "Olio", "Trasparente"]},
+        "products": {
+            "Sottobicchieri": ["Classici", "Luminaria leccese", "Salento", "Personalizzati", "Set coordinati", "Tema mare", "Tema anime"],
+            "Sottopiatti": ["Classici", "Luminaria leccese", "Decorativi", "Coordinati tavola", "Tema Salento", "Eventi"],
+            "Orologi": ["Classici", "Custom", "Anime", "Decorativi", "Parete", "Tema mare", "Tema Salento"],
+            "Decorazioni casa": ["Da parete", "Da tavolo", "Luminaria leccese", "Tema Salento", "Tema mare", "Minimal", "Rustiche"],
+            "Centrotavola": ["Classici", "Decorativi", "Con specchio", "Con LED", "Tema pietra", "Tema legno"],
+            "Targhe e insegne": ["Personalizzate", "Casa", "Attività commerciali", "Eventi", "Decorative"],
+            "Portachiavi": ["Classici", "Personalizzati", "Acrilico", "Legno", "Tema Salento", "Tema anime"],
+            "Idee regalo": ["Personalizzate", "Casa", "Eventi", "Turistiche", "Ricorrenze"],
+        },
+    }
+
+
+def default_section_labels():
+    return {"materials": "Falegnameria", "components": "Ferramenta", "products": "Prodotti Finiti / Semilavorati"}
+
+
+def default_custom_sections():
+    return ["Illuminazione"]
+
+
+def default_product_custom_sections():
+    return []
+
+
+def default_thicknesses():
+    base = [f"{i} mm" for i in range(1, 11)]
+    return {"Legname": base.copy(), "Acrilico": base.copy()}
+
+
+def default_formats():
+    base = ["10x10", "20x20", "30x30", "40x40"]
+    return {"Legname": base.copy(), "Acrilico": base.copy()}
+
+
+def default_illumination_categories():
+    return {
+        "LED": ["Strisce LED", "Moduli LED", "LED touch", "LED COB", "LED neon flex", "Punti luce"],
+        "Alimentatori": ["12V", "24V", "USB 5V", "Driver LED", "Trasformatori"],
+        "Batterie": ["Portabatterie", "Batterie ricaricabili", "Power bank", "Moduli ricarica USB"],
+        "Interruttori": ["Touch", "A pulsante", "A levetta", "Dimmer", "Sensori movimento"],
+        "Cablaggio": ["Cavi", "Connettori", "Morsetti", "Prolunghe", "Saldature"],
+        "Accessori luce": ["Diffusori", "Profili alluminio", "Coperture opaline", "Supporti", "Biadesivo termico"],
+    }
+
+
+def default_typologies():
+    return {
+        "Vernici": {"Smalti": ["Bomboletta", "Bottiglia"], "Acrilici": ["Bomboletta", "Bottiglia"], "Acqua": ["Bottiglia"]},
+        "Finiture": {"Flatting": ["A mano", "Bomboletta"], "Cera": ["A mano"], "Olio": ["A mano"], "Trasparente": ["A mano", "Bomboletta"]},
+        "Attrezzature": {"Pennelli": [], "Rulli": []},
+        "LED": {"Strisce LED": ["Luce calda", "Luce fredda", "RGB", "COB", "Dimmerabile"], "Moduli LED": ["12V", "24V", "USB"], "LED touch": ["Tondo", "Incasso", "Adesivo"]},
+        "Alimentatori": {"12V": ["Da presa", "Da incasso"], "24V": ["Da presa", "Da incasso"], "USB 5V": ["Cavo USB", "Modulo"]},
+        "Batterie": {"Portabatterie": ["AA", "AAA", "18650"], "Batterie ricaricabili": ["Li-ion", "NiMH"], "Power bank": ["USB", "USB-C"]},
+        "Interruttori": {"Touch": ["Capacitivo", "Dimmer"], "A pulsante": ["Mini", "Incasso"], "A levetta": ["Mini", "Standard"], "Dimmer": ["Rotativo", "Touch"]},
+        "Cablaggio": {"Cavi": ["Rosso/Nero", "Trasparente", "USB"], "Connettori": ["Jack", "Morsetto rapido", "JST"], "Morsetti": ["2 poli", "3 poli"]},
+        "Accessori luce": {"Diffusori": ["Opalino", "Trasparente"], "Profili alluminio": ["Piatto", "Angolare", "Incasso"], "Coperture opaline": ["Piatta", "Tonda"]},
+    }
+
+
+def default_product_links():
+    return {
+        "Sottobicchieri": {"Classici": ["Casa Classica", "Minimal Wood", "Rustic Wood"], "Luminaria leccese": ["Luminarie Leccesi", "Salento", "Lecce"], "Tema anime": ["Anime Wood", "Manga Style"]},
+        "Orologi": {"Classici": ["Casa Classica", "Minimal Wood", "Rustic Wood"], "Custom": ["Regali Personalizzati", "Custom Wood"], "Anime": ["One Piece", "Dragon Ball", "Naruto", "Anime Wood", "Manga Style"], "Decorativi": ["Casa Decor", "LED Decor"]},
+        "Centrotavola": {"Con specchio": ["Specchi e Pietra"], "Con LED": ["LED Decor", "Casa Decor"], "Tema pietra": ["Specchi e Pietra", "Rustic Wood"]},
+        "Portachiavi": {"Personalizzati": ["Regali Personalizzati", "Custom Wood"], "Tema Salento": ["Salento", "Luminarie Leccesi"], "Tema anime": ["One Piece", "Dragon Ball", "Naruto", "Anime Wood"]},
+    }
+
+
+def empty_db():
+    return {
+        "materials": {}, "components": {}, "products": {}, "sales": [], "customers": {}, "suppliers": {},
+        "product_families": ["Home Decor", "Orologi", "Gadget", "Idee regalo", "Decorazioni", "Accessori tavola"],
+        "product_types": ["Sottobicchiere", "Orologio da parete", "Targa", "Portachiavi", "Centrotavola", "Decorazione LED"],
+        "product_styles": ["Luminaria", "Classico", "Anime", "Minimal", "Rustico", "Elegante", "Personalizzato"],
+        "product_themes": ["Salento", "Lecce", "Mare", "One Piece", "Natale", "Matrimonio"],
+        "product_collections": ["Luminarie Leccesi", "Casa Classica", "Casa Decor", "Salento", "Mare e Costa", "Anime Wood", "Tavola Coordinata", "Specchi e Pietra", "LED Decor", "Regali Personalizzati", "Eventi e Cerimonie", "Minimal Wood", "Rustic Wood"],
+        "product_tags": ["turistico", "regalo", "legno inciso", "anime", "luminaria", "salento"],
+        "product_collection_links": default_product_links(),
+        "categories": default_categories(),
+        "section_labels": default_section_labels(),
+        "custom_sections": default_custom_sections(),
+        "product_custom_sections": default_product_custom_sections(),
+        "thicknesses": default_thicknesses(),
+        "formats": default_formats(),
+        "typologies": default_typologies(),
+    }
+
+
+def init_sqlite_db():
+    with connect() as conn:
+        conn.executescript("""
+        CREATE TABLE IF NOT EXISTS app_state(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        INSERT OR IGNORE INTO meta(key,value) VALUES('schema_version','37_1_web_full_logic');
+        """)
+
+
+def normalize_db(data: Any) -> dict:
+    if not isinstance(data, dict):
+        data = empty_db()
+    if "consumables" in data and "components" not in data:
+        data["components"] = data.get("consumables", {})
+    base = empty_db()
+    for key, val in base.items():
+        data.setdefault(key, copy.deepcopy(val))
+
+    # merge defaults without deleting user additions
+    for scope, cats in default_categories().items():
+        data.setdefault("categories", {}).setdefault(scope, {})
+        for cat, subs in cats.items():
+            data["categories"][scope].setdefault(cat, [])
+            for sub in subs:
+                if sub not in data["categories"][scope][cat]:
+                    data["categories"][scope][cat].append(sub)
+    data.setdefault("categories", {}).setdefault("Illuminazione", {})
+    for cat, subs in default_illumination_categories().items():
+        data["categories"]["Illuminazione"].setdefault(cat, [])
+        for sub in subs:
+            if sub not in data["categories"]["Illuminazione"][cat]:
+                data["categories"]["Illuminazione"][cat].append(sub)
+    for sec in default_custom_sections():
+        if sec not in data.setdefault("custom_sections", []):
+            data["custom_sections"].append(sec)
+    data["custom_sections"] = [x for x in data.get("custom_sections", []) if x not in ("materials", "components", "products")]
+    for k, vals in default_formats().items():
+        data.setdefault("formats", {}).setdefault(k, [])
+        for v in vals:
+            if v not in data["formats"][k]: data["formats"][k].append(v)
+    for k, vals in default_thicknesses().items():
+        data.setdefault("thicknesses", {}).setdefault(k, [])
+        for v in vals:
+            if v not in data["thicknesses"][k]: data["thicknesses"][k].append(v)
+    data.setdefault("typologies", {}).update({k: data.get("typologies", {}).get(k, v) for k, v in default_typologies().items()})
+    labels = data.setdefault("section_labels", default_section_labels())
+    for k, v in default_section_labels().items():
+        if labels.get(k) in ("", k, None): labels[k] = v
+    for name, info in list(data.get("customers", {}).items()):
+        if not isinstance(info, dict): data["customers"][name] = {"name": name, "notes": str(info)}
+        else:
+            info.setdefault("name", name); info.setdefault("notes", info.get("note", ""))
+    for name, info in list(data.get("suppliers", {}).items()):
+        if not isinstance(info, dict): data["suppliers"][name] = {"name": name, "sections": []}
+        else:
+            info.setdefault("name", name)
+            if isinstance(info.get("sections", []), str): info["sections"] = [info["sections"]] if info["sections"] else []
+            info.setdefault("sections", [])
+    return data
+
+
+def load_legacy_json_if_available():
+    p = legacy_json_path()
+    if not p.exists(): return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def load_db() -> dict:
+    init_sqlite_db()
+    with connect() as conn:
+        row = conn.execute("SELECT value FROM app_state WHERE key='main'").fetchone()
+    if row and row["value"]:
+        try:
+            return normalize_db(json.loads(row["value"]))
+        except Exception:
+            pass
+    legacy = load_legacy_json_if_available()
+    data = normalize_db(legacy if legacy is not None else empty_db())
+    save_db(data)
+    return data
+
+
+def save_db(db: dict):
+    init_sqlite_db()
+    with connect() as conn:
+        conn.execute("INSERT INTO app_state(key,value,updated_at) VALUES('main',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at", (json.dumps(normalize_db(db), ensure_ascii=False), now_str()))
+
+
+def section_label(db, scope):
+    return db.get("section_labels", {}).get(scope, default_section_labels().get(scope, scope))
+
+
+def scope_from_display(db, display):
+    labels = db.get("section_labels", {})
+    for scope in ("materials", "components", "products"):
+        if display == labels.get(scope, default_section_labels().get(scope)):
+            return scope
+    return display
+
+
+def raw_section_choices(db):
+    product_sections = set(db.get("product_custom_sections", []))
+    choices = [section_label(db, "materials"), section_label(db, "components")]
+    choices += [x for x in db.get("custom_sections", []) if x not in product_sections and x != section_label(db, "products")]
+    return list(dict.fromkeys(choices))
+
+
+def product_section_choices(db):
+    raw = set([section_label(db, "materials"), section_label(db, "components")] + db.get("custom_sections", []))
+    choices = [section_label(db, "products")] + [x for x in db.get("product_custom_sections", []) if x not in raw]
+    return list(dict.fromkeys(choices))
+
+
+def category_names(db, scope):
+    return sorted(db.get("categories", {}).get(scope, {}).keys())
+
+
+def subcategory_names(db, scope, category):
+    return sorted(db.get("categories", {}).get(scope, {}).get(category, []))
+
+
+def ensure_category(db, scope, category, subcategory=""):
+    category = (category or "").strip(); subcategory = (subcategory or "").strip()
+    if not category: return
+    db.setdefault("categories", {}).setdefault(scope, {}).setdefault(category, [])
+    if subcategory and subcategory not in db["categories"][scope][category]:
+        db["categories"][scope][category].append(subcategory)
+
+
+def display_name_from_key(key, info=None):
+    if info and info.get("display_name"): return info["display_name"]
+    return str(key).split("__", 1)[0] if "__" in str(key) else str(key)
+
+
+def supplier_item_key(name, section, category, subcategory, size, thickness, supplier):
+    raw = "|".join(str(x).strip().lower() for x in (name, section, category, subcategory, size, thickness, supplier))
+    safe = "".join(ch if ch.isalnum() else "_" for ch in raw)
+    return f"{name}__{safe}"
+
+
+def find_supplier_item_key(db, table, name, section, category, subcategory, size, thickness, supplier):
+    target = tuple(str(x).strip().lower() for x in (name, section, category, subcategory, size, thickness, supplier))
+    for key, info in db.get(table, {}).items():
+        current = tuple(str(x).strip().lower() for x in (display_name_from_key(key, info), info.get("section", ""), info.get("category", ""), info.get("subcategory", ""), info.get("size", ""), info.get("thickness", ""), info.get("supplier", "")))
+        if current == target: return key
+    return None
+
+
+def get_raw_item(db, name):
+    for table in ("materials", "components"):
+        table_data = db.get(table, {})
+        if not isinstance(table_data, dict):
+            continue
+        if name in table_data and isinstance(table_data[name], dict):
+            return table_data[name], table, name
+        for k, info in table_data.items():
+            if isinstance(info, dict) and display_name_from_key(k, info) == name:
+                return info, table, k
+    return None, None, None
+
+
+def aggregated_raw_items(db, table_filter=None):
+    groups = {}
+    for table in ("materials", "components"):
+        if table_filter and table != table_filter:
+            continue
+        table_data = db.get(table, {})
+        if not isinstance(table_data, dict):
+            continue
+        for key, info in table_data.items():
+            if not isinstance(info, dict):
+                continue
+            name = display_name_from_key(key, info)
+            signature = (
+                table,
+                str(name).lower(),
+                str(info.get("section", "")).lower(),
+                str(info.get("category", "")).lower(),
+                str(info.get("subcategory", "")).lower(),
+                str(info.get("size", "")).lower(),
+                str(info.get("thickness", "")).lower(),
+                str(info.get("unit", "")).lower(),
+            )
+            g = groups.setdefault(signature, {
+                "table": table,
+                "key": key,
+                "name": name,
+                "section": info.get("section", ""),
+                "category": info.get("category", ""),
+                "subcategory": info.get("subcategory", ""),
+                "size": info.get("size", ""),
+                "thickness": info.get("thickness", ""),
+                "unit": info.get("unit", ""),
+                "stock": 0.0,
+                "value": 0.0,
+                "suppliers": [],
+                "last_added": "",
+            })
+            stock = parse_float(info.get("stock"))
+            cpu = parse_float(info.get("cost_per_unit"))
+            g["stock"] += stock
+            g["value"] += stock * cpu
+            supplier = info.get("supplier") or "Senza fornitore"
+            g["suppliers"].append(f"{supplier}: {stock:.2f} {info.get('unit','')} a {cpu:.2f} €/u")
+            if str(info.get("last_added", "")) > str(g.get("last_added", "")):
+                g["last_added"] = info.get("last_added", "")
+    out = []
+    for g in groups.values():
+        g["cost_per_unit"] = g["value"] / g["stock"] if g["stock"] else 0.0
+        g["supplier_details"] = " | ".join(g["suppliers"])
+        out.append(g)
+    return out
+
+
+def build_purchase_item_name(db, section, category, subcategory, size, thickness):
+    parts = []
+    if section == section_label(db, "materials"):
+        parts.append(subcategory or category)
+        if size: parts.append(size)
+        if thickness: parts.append(thickness)
+    else:
+        if category: parts.append(category)
+        if subcategory and subcategory.lower() != category.lower(): parts.append(subcategory)
+        if size: parts.append(size)
+        if thickness: parts.append(thickness)
+    return " ".join([p for p in parts if p]).strip()
+
+
+def add_purchase(db, payload):
+    selected_section = payload.get("section") or section_label(db, "materials")
+    scope = scope_from_display(db, selected_section)
+    table = "materials" if scope == "materials" else "components"
+    category = (payload.get("category") or "").strip(); subcategory = (payload.get("subcategory") or "").strip()
+    size = (payload.get("size") or "").strip(); thickness = (payload.get("thickness") or "").strip(); unit = (payload.get("unit") or "pz").strip() or "pz"
+    name = (payload.get("name") or build_purchase_item_name(db, selected_section, category, subcategory, size, thickness)).strip()
+    qty = parse_float(payload.get("quantity")); total = parse_float(payload.get("total_cost")); supplier = (payload.get("supplier") or "Senza fornitore").strip()
+    if not name: raise ValueError("Nome articolo non generabile: compila almeno categoria/sottocategoria/formato.")
+    if qty <= 0 or total <= 0: raise ValueError("Quantità e costo totale devono essere maggiori di zero.")
+    supplier_info = db.setdefault("suppliers", {}).setdefault(supplier, {"name": supplier, "sections": [], "links": []})
+    if selected_section not in supplier_info.setdefault("sections", []): supplier_info["sections"].append(selected_section)
+    if category:
+        link = {"section": selected_section, "category": category, "subcategory": subcategory}
+        if link not in supplier_info.setdefault("links", []): supplier_info["links"].append(link)
+    key = find_supplier_item_key(db, table, name, selected_section, category, subcategory, size, thickness, supplier) or supplier_item_key(name, selected_section, category, subcategory, size, thickness, supplier)
+    entry = db.setdefault(table, {}).get(key, {"display_name": name, "unit": unit, "cost_per_unit": total/qty, "stock": 0, "category": category, "subcategory": subcategory, "size": size, "thickness": thickness, "section": selected_section, "supplier": supplier, "last_added": ""})
+    old_qty = parse_float(entry.get("stock")); old_value = old_qty * parse_float(entry.get("cost_per_unit")); new_qty = old_qty + qty
+    entry.update({"display_name": name, "unit": unit, "category": category, "subcategory": subcategory, "size": size, "thickness": thickness, "section": selected_section, "supplier": supplier, "stock": new_qty, "cost_per_unit": (old_value + total) / new_qty, "last_added": datetime.now().strftime("%d-%m-%Y %H:%M:%S")})
+    db[table][key] = entry; ensure_category(db, scope, category, subcategory)
+    return {"table": table, "key": key, "item": entry}
+
+
+def product_material_unit_cost(db, name):
+    product = db.get("products", {}).get(name) or {}; total = 0.0
+    for row in product.get("bom", []):
+        item, _, _ = get_raw_item(db, row.get("name", ""))
+        if item: total += parse_float(item.get("cost_per_unit")) * parse_float(row.get("qty"))
+    return total
+
+
+def product_labor_unit_cost(db, name):
+    p = db.get("products", {}).get(name) or {}
+    return parse_float(p.get("labor_hours")) * parse_float(p.get("hourly_rate"))
+
+
+def product_unit_cost(db, name):
+    p = db.get("products", {}).get(name) or {}
+    return product_material_unit_cost(db, name) + product_labor_unit_cost(db, name) + parse_float(p.get("extra_unit_cost"))
+
+
+def product_collection_choices(db, category=None, subcategory=None):
+    links = db.setdefault("product_collection_links", {})
+    if category and subcategory:
+        linked = sorted(links.get(category, {}).get(subcategory, []))
+        if linked: return linked
+    vals = set(db.get("product_collections", []))
+    for sub_map in links.values():
+        if isinstance(sub_map, dict):
+            for collections in sub_map.values(): vals.update(collections)
+    return sorted(vals)
+
+
+def create_or_update_product(db, payload):
+    name = (payload.get("name") or "").strip()
+    if not name: raise ValueError("Inserisci il nome prodotto.")
+    old_name = payload.get("old_name") or name
+    section = payload.get("section") or section_label(db, "products")
+    product = db.setdefault("products", {}).get(old_name, {}) if old_name in db.setdefault("products", {}) else {}
+    if old_name != name and old_name in db["products"]: db["products"].pop(old_name, None)
+    product.update({
+        "section": section, "category": payload.get("category", ""), "subcategory": payload.get("subcategory", ""),
+        "collection": payload.get("collection", ""), "tags": payload.get("tags", ""), "unit": payload.get("unit", "pz") or "pz",
+        "labor_hours": max(0.0, parse_float(payload.get("labor_hours"))), "hourly_rate": max(0.0, parse_float(payload.get("hourly_rate"))),
+        "extra_unit_cost": max(0.0, parse_float(payload.get("extra_unit_cost"))), "stock": max(0.0, parse_float(payload.get("stock", product.get("stock", 0)))),
+        "bom": payload.get("bom", product.get("bom", [])) or [], "description": payload.get("description", product.get("description", "")),
+    })
+    db["products"][name] = product
+    ensure_category(db, scope_from_display(db, section), product.get("category", ""), product.get("subcategory", ""))
+    return product
+
+
+def find_material_variants(db, item_name, needed_qty=0):
+    item, table, key = get_raw_item(db, item_name)
+    if not item: return []
+    category, subcategory, size, thickness = item.get("category", ""), item.get("subcategory", ""), item.get("size", ""), item.get("thickness", "")
+    candidates = []
+    for table_name in ("materials", "components"):
+        for cand_key, info in db.get(table_name, {}).items():
+            if cand_key == key: continue
+            stock = parse_float(info.get("stock"))
+            if stock <= 0: continue
+            same_category = category and info.get("category") == category; same_sub = subcategory and info.get("subcategory") == subcategory; same_size = size and info.get("size") == size; same_thick = thickness and info.get("thickness") == thickness
+            score = 0; notes=[]
+            if category == "Legname":
+                if not (same_category and same_size and same_thick): continue
+                score += 10; notes += ["stesso legname", "stesso formato", "stesso spessore"]
+                notes.append("stessa essenza" if same_sub else f"essenza alternativa: {info.get('subcategory','')}")
+            else:
+                if not same_category: continue
+                score += 4; notes.append("stessa categoria")
+                if same_sub: score += 3; notes.append("stessa sottocategoria")
+                if same_size: score += 2; notes.append("stesso formato/tipologia")
+                if same_thick: score += 2; notes.append("stesso spessore")
+            if stock >= needed_qty: score += 3; notes.append("stock sufficiente")
+            else: notes.append("stock parziale")
+            candidates.append({"key": cand_key, "table": table_name, "name": display_name_from_key(cand_key, info), "stock": stock, "unit": info.get("unit", ""), "category": info.get("category", ""), "subcategory": info.get("subcategory", ""), "size": info.get("size", ""), "thickness": info.get("thickness", ""), "supplier": info.get("supplier", ""), "score": score, "can_cover": stock >= needed_qty, "notes": ", ".join(notes)})
+    return sorted(candidates, key=lambda x: (x["can_cover"], x["score"], x["stock"]), reverse=True)[:8]
+
+
+def production_check(db, product_name, qty):
+    product = db.get("products", {}).get(product_name)
+    if not product: raise ValueError("Prodotto non trovato.")
+    rows = []
+    for idx, row in enumerate(product.get("bom", [])):
+        item_name = row.get("name", ""); need = parse_float(row.get("qty")) * qty
+        item, table, key = get_raw_item(db, item_name)
+        if not item:
+            rows.append({"index": idx, "ok": False, "name": item_name or "Voce senza nome", "key": item_name, "table": "", "needed": need, "available": 0, "missing": need, "unit": "", "reason": "Articolo non trovato", "variants": []})
+            continue
+        available = parse_float(item.get("stock")); ok = available >= need
+        rows.append({"index": idx, "ok": ok, "name": display_name_from_key(key, item), "key": key, "table": table, "needed": need, "available": available, "missing": max(0, need-available), "unit": item.get("unit", ""), "reason": "Disponibile" if ok else "Stock insufficiente", "variants": [] if ok else find_material_variants(db, key, need)})
+    return {"can_produce": all(r["ok"] for r in rows), "rows": rows}
+
+
+def produce_product(db, product_name, qty, substitutions=None):
+    substitutions = substitutions or {}
+    check = production_check(db, product_name, qty)
+    deductions = []
+    for row in check["rows"]:
+        if row["ok"]: deductions.append((row["table"], row["key"], row["needed"]))
+        else:
+            sub = substitutions.get(str(row["index"])) or substitutions.get(row["index"])
+            if not sub: raise ValueError(f"Materiale mancante non risolto: {row['name']}")
+            deductions.append((sub["table"], sub["key"], row["needed"]))
+    for table, key, need in deductions:
+        if key not in db.get(table, {}): raise ValueError(f"Materiale non trovato: {key}")
+        if parse_float(db[table][key].get("stock")) < need: raise ValueError(f"Stock insufficiente per {display_name_from_key(key, db[table][key])}")
+    for table, key, need in deductions:
+        db[table][key]["stock"] = parse_float(db[table][key].get("stock")) - need
+    db["products"][product_name]["stock"] = parse_float(db["products"][product_name].get("stock")) + qty
+    return {"ok": True, "deductions": deductions, "new_stock": db["products"][product_name]["stock"]}
+
+
+def calculate_quote(db, payload):
+    rows = payload.get("rows", []) or []
+    estimates = payload.get("estimates", []) or []
+    base = sum(parse_float(x.get("cost")) for x in rows) + sum(parse_float(x.get("cost", parse_float(x.get("qty"))*parse_float(x.get("unit_cost")))) for x in estimates)
+    base += parse_float(payload.get("hours")) * parse_float(payload.get("rate"))
+    base += parse_float(payload.get("packaging")) + parse_float(payload.get("energy")) + parse_float(payload.get("wear"))
+    commission = parse_float(payload.get("commission")) / 100; margin = parse_float(payload.get("margin", 30)) / 100; discount = parse_float(payload.get("discount")) / 100
+    if commission + margin >= 1: raise ValueError("Margine e commissioni sono troppo alti.")
+    if discount >= 1: raise ValueError("Lo sconto deve essere inferiore al 100%.")
+    min_price = base/(1-commission) if commission < 1 else base; recommended = base/(1-commission-margin); discounted = recommended*(1-discount); premium = recommended*1.2
+    return {"real": round(base,2), "min": round(min_price,2), "recommended": round(recommended,2), "discounted": round(discounted,2), "premium": round(premium,2)}
+
+
+def record_product_sale(db, payload):
+    name = payload.get("product") or payload.get("name")
+    qty = parse_float(payload.get("qty")); price = parse_float(payload.get("unit_price"))
+    product = db.get("products", {}).get(name)
+    if not product: raise ValueError("Prodotto non trovato.")
+    if qty <= 0 or price <= 0: raise ValueError("Quantità e prezzo devono essere maggiori di zero.")
+    stock = parse_float(product.get("stock"))
+    if stock < qty: raise ValueError(f"Stock insufficiente. Disponibile {stock:.2f}, richiesto {qty:.2f}.")
+    material = product_material_unit_cost(db, name); labor = product_labor_unit_cost(db, name); extra = parse_float(product.get("extra_unit_cost")); total_unit = material+labor+extra
+    product["stock"] = stock - qty
+    sale = {"date": today_str(), "customer": payload.get("customer", ""), "product": name, "qty": qty, "unit_price": price, "total": qty*price, "source": "magazzino", "material_unit_cost": material, "labor_unit_cost": labor, "extra_unit_cost": extra, "total_unit_cost": total_unit, "margin_total": (price-total_unit)*qty}
+    db.setdefault("sales", []).append(sale)
+    return sale
+
+
+def record_quote_sale(db, payload):
+    qty = parse_float(payload.get("qty", 1)); price = parse_float(payload.get("unit_price")); name = payload.get("name") or "Vendita da preventivo"
+    if qty <= 0 or price <= 0: raise ValueError("Quantità e prezzo unitario validi richiesti.")
+    quote_material_total = sum(parse_float(x.get("cost")) for x in payload.get("rows", []))
+    quote_labor_total = parse_float(payload.get("hours")) * parse_float(payload.get("rate"))
+    quote_extra_total = parse_float(payload.get("packaging")) + parse_float(payload.get("energy")) + parse_float(payload.get("wear"))
+    material = quote_material_total/qty if qty else 0; labor = quote_labor_total/qty if qty else 0; extra = quote_extra_total/qty if qty else 0; total_unit = material+labor+extra
+    sale = {"date": today_str(), "customer": payload.get("customer", ""), "product": name, "qty": qty, "unit_price": price, "total": qty*price, "source": "preventivo", "discount_percent": parse_float(payload.get("discount")), "material_unit_cost": material, "labor_unit_cost": labor, "extra_unit_cost": extra, "total_unit_cost": total_unit, "margin_total": (price-total_unit)*qty, "estimated_materials": payload.get("estimates", [])}
+    db.setdefault("sales", []).append(sale)
+    return sale
+
+
+def sale_cost_breakdown(db, sale):
+    product = sale.get("product", ""); qty = parse_float(sale.get("qty")); unit_price = parse_float(sale.get("unit_price")); revenue = parse_float(sale.get("total")) or unit_price*qty
+    material = parse_float(sale.get("material_unit_cost", product_material_unit_cost(db, product)))
+    labor = parse_float(sale.get("labor_unit_cost", product_labor_unit_cost(db, product)))
+    extra = parse_float(sale.get("extra_unit_cost", parse_float((db.get("products", {}).get(product) or {}).get("extra_unit_cost"))))
+    total_unit = material+labor+extra
+    margin = parse_float(sale.get("margin_total", revenue-total_unit*qty))
+    return material, labor, extra, total_unit, margin, revenue
+
+
+
+def _date_to_iso(value):
+    """Converte date italiane o ISO in YYYY-MM-DD per ordinamenti/report."""
+    s = str(value or "").strip()
+    if not s:
+        return ""
+    if " " in s:
+        s = s.split(" ")[0]
+    for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+        except Exception:
+            pass
+    return s
+
+
+def _month_label(value):
+    iso = _date_to_iso(value)
+    try:
+        return datetime.strptime(iso, "%Y-%m-%d").strftime("%Y-%m")
+    except Exception:
+        return "Senza data"
+
+
+def _sum_row(target, **values):
+    for key, value in values.items():
+        target[key] = parse_float(target.get(key)) + parse_float(value)
+
+
+def report(db):
+    """Report gestionale avanzato per dashboard, pivot e grafici.
+
+    Mantiene i campi storici usati dal frontend e aggiunge dataset pronti per grafici:
+    - sales_by_month
+    - sales_by_source
+    - stock_by_section
+    - stock_by_category
+    - margin_by_product
+    - pivot_product_month
+    - pivot_source_month
+    - top_products
+    - low_stock
+    """
+    raw_total = 0.0
+    section_map = {}
+    category_map = {}
+    low_stock = []
+
+    for table, fallback in (("materials", section_label(db, "materials")), ("components", section_label(db, "components"))):
+        for key, info in db.get(table, {}).items():
+            if not isinstance(info, dict):
+                continue
+            qty = parse_float(info.get("stock"))
+            cost = parse_float(info.get("cost_per_unit"))
+            val = qty * cost
+            raw_total += val
+            sec = info.get("section", fallback) or fallback
+            cat = info.get("category", "Senza categoria") or "Senza categoria"
+            sub = info.get("subcategory", "") or ""
+            supplier = info.get("supplier", "") or "Senza fornitore"
+            name = display_name_from_key(key, info)
+
+            d = section_map.setdefault(sec, {"items": 0, "qty": 0.0, "value": 0.0})
+            d["items"] += 1; d["qty"] += qty; d["value"] += val
+
+            c = category_map.setdefault(cat, {"category": cat, "items": 0, "qty": 0.0, "value": 0.0})
+            c["items"] += 1; c["qty"] += qty; c["value"] += val
+
+            if qty <= 1:
+                low_stock.append({
+                    "name": name, "section": sec, "category": cat, "subcategory": sub,
+                    "supplier": supplier, "qty": qty, "unit": info.get("unit", ""), "value": val
+                })
+
+    product_total = 0.0
+    product_stock_rows = []
+    for name, info in db.get("products", {}).items():
+        if not isinstance(info, dict):
+            continue
+        stock = parse_float(info.get("stock"))
+        unit_cost = product_unit_cost(db, name)
+        value = stock * unit_cost
+        product_total += value
+        product_stock_rows.append({
+            "product": name,
+            "category": info.get("category", "") or "Senza categoria",
+            "subcategory": info.get("subcategory", "") or "",
+            "stock": stock,
+            "unit_cost": unit_cost,
+            "value": value,
+        })
+
+    sales_total = 0.0
+    margin_total = 0.0
+    product_map = {}
+    month_map = {}
+    source_map = {}
+    source_month_map = {}
+    product_month_map = {}
+    details = []
+
+    for sale in db.get("sales", []):
+        if not isinstance(sale, dict):
+            continue
+        material, labor, extra, total_unit, margin, revenue = sale_cost_breakdown(db, sale)
+        qty = parse_float(sale.get("qty"))
+        product = sale.get("product", "Senza prodotto") or "Senza prodotto"
+        source = sale.get("source", "manuale") or "manuale"
+        date_raw = sale.get("date", "")
+        date_iso = _date_to_iso(date_raw)
+        month = _month_label(date_raw)
+        cost_total = total_unit * qty
+
+        sales_total += revenue
+        margin_total += margin
+
+        row = product_map.setdefault(product, {"product": product, "qty": 0.0, "revenue": 0.0, "materials": 0.0, "labor": 0.0, "extra": 0.0, "cost": 0.0, "margin": 0.0})
+        row["qty"] += qty; row["revenue"] += revenue; row["materials"] += material * qty; row["labor"] += labor * qty; row["extra"] += extra * qty; row["cost"] += cost_total; row["margin"] += margin
+
+        m = month_map.setdefault(month, {"month": month, "revenue": 0.0, "cost": 0.0, "margin": 0.0, "qty": 0.0, "sales": 0})
+        m["revenue"] += revenue; m["cost"] += cost_total; m["margin"] += margin; m["qty"] += qty; m["sales"] += 1
+
+        src = source_map.setdefault(source, {"source": source, "revenue": 0.0, "cost": 0.0, "margin": 0.0, "qty": 0.0, "sales": 0})
+        src["revenue"] += revenue; src["cost"] += cost_total; src["margin"] += margin; src["qty"] += qty; src["sales"] += 1
+
+        sm_key = (source, month)
+        sm = source_month_map.setdefault(sm_key, {"source": source, "month": month, "revenue": 0.0, "margin": 0.0, "qty": 0.0})
+        sm["revenue"] += revenue; sm["margin"] += margin; sm["qty"] += qty
+
+        pm_key = (product, month)
+        pm = product_month_map.setdefault(pm_key, {"product": product, "month": month, "revenue": 0.0, "margin": 0.0, "qty": 0.0})
+        pm["revenue"] += revenue; pm["margin"] += margin; pm["qty"] += qty
+
+        details.append({
+            "date": normalize_date(date_raw), "date_iso": date_iso, "month": month,
+            "product": product, "source": source, "customer": sale.get("customer", ""),
+            "qty": qty, "unit_price": parse_float(sale.get("unit_price")), "revenue": revenue,
+            "material_unit": material, "labor_unit": labor, "extra_unit": extra,
+            "total_unit_cost": total_unit, "cost_total": cost_total, "margin": margin,
+            "margin_pct": (margin / revenue * 100 if revenue else 0),
+        })
+
+    products = []
+    for row in product_map.values():
+        row["margin_pct"] = row["margin"] / row["revenue"] * 100 if row["revenue"] else 0
+        products.append(row)
+
+    sections = [{"section": k, **v} for k, v in section_map.items()]
+    sections.sort(key=lambda x: x.get("value", 0), reverse=True)
+    stock_by_category = sorted(category_map.values(), key=lambda x: x.get("value", 0), reverse=True)
+    sales_by_month = sorted(month_map.values(), key=lambda x: x.get("month", ""))
+    sales_by_source = sorted(source_map.values(), key=lambda x: x.get("revenue", 0), reverse=True)
+    pivot_product_month = sorted(product_month_map.values(), key=lambda x: (x.get("product", ""), x.get("month", "")))
+    pivot_source_month = sorted(source_month_map.values(), key=lambda x: (x.get("source", ""), x.get("month", "")))
+    details.sort(key=lambda x: x.get("date_iso", ""), reverse=True)
+    products.sort(key=lambda x: x.get("margin", 0), reverse=True)
+    product_stock_rows.sort(key=lambda x: x.get("value", 0), reverse=True)
+    low_stock.sort(key=lambda x: x.get("qty", 0))
+
+    return {
+        "raw_total": raw_total,
+        "product_total": product_total,
+        "sales_total": sales_total,
+        "margin_total": margin_total,
+        "margin_pct": (margin_total / sales_total * 100 if sales_total else 0),
+        "sections": sections,
+        "products": products,
+        "margins_by_product": products,
+        "sales_detail": details,
+        "sales_by_month": sales_by_month,
+        "sales_by_source": sales_by_source,
+        "stock_by_section": sections,
+        "stock_by_category": stock_by_category,
+        "product_stock": product_stock_rows,
+        "pivot_product_month": pivot_product_month,
+        "pivot_source_month": pivot_source_month,
+        "top_products": products[:8],
+        "low_stock": low_stock[:20],
+    }
+
+
+def create_basic_material_presets(db):
+    created = 0; updated = 0; section = section_label(db,"materials"); db.setdefault("materials", {})
+    for category, names in {"Legname":["Betulla","Pioppo","MDF","Multistrato"], "Acrilico":["Rosso","Nero","Giallo","Blu","Verde","Bianco","Trasparente","Arancio"]}.items():
+        formats = db.get("formats", {}).get(category, ["10x10","20x20","30x30","40x40"]); thicks = db.get("thicknesses", {}).get(category, [f"{i} mm" for i in range(1,11)])
+        ensure_category(db,"materials",category)
+        for sub in names:
+            ensure_category(db,"materials",category,sub)
+            for fmt in formats:
+                for th in thicks:
+                    name = f"{sub} {fmt} {th}" if category == "Legname" else f"Acrilico {sub} {fmt} {th}"
+                    key = supplier_item_key(name, section, category, sub, fmt, th, "Preset")
+                    if key in db["materials"]: updated += 1
+                    else: created += 1
+                    db["materials"].setdefault(key, {"display_name": name, "section": section, "category": category, "subcategory": sub, "size": fmt, "thickness": th, "unit": "pz", "supplier": "Preset", "cost_per_unit": 0.0, "stock": 0.0, "last_added": today_str()})
+    return {"created": created, "updated": updated}
+
+
+def backup_database(suffix="backup"):
+    source = db_path()
+    if not source.exists(): return ""
+    dest = user_data_dir() / f"mn_laser_lab_{suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    shutil.copy2(source, dest)
+    return str(dest)

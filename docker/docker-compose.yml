@@ -1,0 +1,15 @@
+services:
+  mn-laser-lab:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - mn_laser_lab_data:/data
+    environment:
+      MN_USER_DATA_DIR: /data
+      MN_BACKEND_PORT: 8000
+
+volumes:
+  mn_laser_lab_data:
