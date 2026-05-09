@@ -18,7 +18,16 @@ function resourcePath(...parts) {
   if (isPackaged()) {
     return path.join(process.resourcesPath, ...parts);
   }
+
   return path.join(__dirname, ...parts);
+}
+
+function appAssetPath(...parts) {
+  return path.join(__dirname, "assets", ...parts);
+}
+
+function appIconPath() {
+  return appAssetPath("mn_laser_lab_logo.ico");
 }
 
 function backendExecutablePath() {
@@ -63,12 +72,14 @@ function writeLog(message) {
 function checkPackagedResources() {
   const backendExe = backendExecutablePath();
   const frontendIndex = frontendIndexPath();
+  const icon = appIconPath();
 
   writeLog(`app.isPackaged: ${isPackaged()}`);
   writeLog(`process.resourcesPath: ${process.resourcesPath}`);
   writeLog(`Backend path: ${backendExe}`);
   writeLog(`Frontend folder: ${frontendDistPath()}`);
   writeLog(`Frontend index: ${frontendIndex}`);
+  writeLog(`App icon: ${icon}`);
 
   if (isPackaged()) {
     if (!fs.existsSync(backendExe)) {
@@ -86,6 +97,10 @@ function checkPackagedResources() {
           "Manca index.html nella cartella resources/frontend."
       };
     }
+  }
+
+  if (!fs.existsSync(icon)) {
+    writeLog(`Icona non trovata: ${icon}`);
   }
 
   return { ok: true };
@@ -154,6 +169,7 @@ async function waitForBackend(timeoutMs = 30000) {
   while (Date.now() - start < timeoutMs) {
     try {
       const res = await fetch(HEALTH_URL);
+
       if (res.ok) {
         writeLog("Backend pronto.");
         return true;
@@ -201,7 +217,7 @@ function createErrorHtml(title, details) {
             border: 1px solid rgba(148, 163, 184, 0.35);
             border-radius: 24px;
             padding: 28px;
-            box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
           }
           h1 {
             margin: 0 0 12px;
@@ -254,6 +270,8 @@ function loadErrorPage(title, details) {
 }
 
 function createWindow(backendReady) {
+  const iconPath = appIconPath();
+
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 900,
@@ -261,6 +279,7 @@ function createWindow(backendReady) {
     minHeight: 720,
     title: "MN Laser Lab Manager",
     backgroundColor: "#061214",
+    icon: iconPath,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -463,34 +482,52 @@ ipcMain.handle("check-for-updates", async () => {
   return { ok: true };
 });
 
-app.whenReady().then(async () => {
-  writeLog("Avvio applicazione.");
+app.setAppUserModelId("com.mnlaserlab.manager");
 
-  const resourcesCheck = checkPackagedResources();
+const gotTheLock = app.requestSingleInstanceLock();
 
-  if (!resourcesCheck.ok) {
-    writeLog(`Risorse mancanti: ${resourcesCheck.message}`);
-    dialog.showErrorBox("Risorse mancanti", resourcesCheck.message);
-  }
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
 
-  const backendStarted = startBackend();
+      mainWindow.focus();
+    }
+  });
 
-  let backendReady = false;
+  app.whenReady().then(async () => {
+    writeLog("Avvio applicazione.");
 
-  if (backendStarted) {
-    backendReady = await waitForBackend();
-  }
+    const resourcesCheck = checkPackagedResources();
 
-  setupAppMenu();
+    if (!resourcesCheck.ok) {
+      writeLog(`Risorse mancanti: ${resourcesCheck.message}`);
+      dialog.showErrorBox("Risorse mancanti", resourcesCheck.message);
+    }
 
-  createWindow(backendReady);
+    const backendStarted = startBackend();
 
-  if (!backendReady) {
-    writeLog("Backend non pronto, ma provo comunque a mostrare il frontend locale.");
-  }
+    let backendReady = false;
 
-  setupAutoUpdater();
-});
+    if (backendStarted) {
+      backendReady = await waitForBackend();
+    }
+
+    setupAppMenu();
+
+    createWindow(backendReady);
+
+    if (!backendReady) {
+      writeLog("Backend non pronto, ma provo comunque a mostrare il frontend locale.");
+    }
+
+    setupAutoUpdater();
+  });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

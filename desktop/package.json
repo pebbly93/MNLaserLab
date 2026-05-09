@@ -1,6 +1,6 @@
 {
   "name": "mn-laser-lab-manager-desktop",
-  "version": "39.3.6",
+  "version": "39.3.9",
   "description": "MN Laser Lab Manager Desktop - Electron + FastAPI + React",
   "author": "MN Laser Lab",
   "private": true,
@@ -49,6 +49,7 @@
       "target": [
         "nsis"
       ],
+      "icon": "assets/mn_laser_lab_logo.ico",
       "artifactName": "MN-Laser-Lab-Manager-Setup-${version}.${ext}"
     },
     "nsis": {
@@ -57,6 +58,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "MN Laser Lab Manager",
+      "installerIcon": "assets/mn_laser_lab_logo.ico",
+      "uninstallerIcon": "assets/mn_laser_lab_logo.ico",
+      "installerHeaderIcon": "assets/mn_laser_lab_logo.ico",
       "deleteAppDataOnUninstall": false
     },
     "publish": [
