@@ -160,7 +160,17 @@ function ErrorBox({ msg }) { return msg ? <div className="error"><AlertTriangle 
 function Empty({ text = 'Nessun dato' }) { return <div className="empty"><Sparkles /><b>{text}</b><span>Inserisci i primi dati o importa il database della versione desktop.</span></div>; }
 function Skeleton() { return <div className="skeleton"><i/><i/><i/></div>; }
 function SearchBox({ value, onChange, placeholder = 'Cerca...' }) { return <div className="search"><Search /><input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} /></div>; }
-function DataTable({ columns, rows, empty = 'Nessun risultato', meta = 'Dati aggiornati dal database' }) { return <div className="table-card"><div className="table-meta"><b>{rows.length} righe</b><span>{meta}</span></div><div className="table-wrap"><table><thead><tr>{columns.map(c => <th key={c.key}>{c.label}</th>)}</tr></thead><tbody>{rows.length ? rows.map((r, i) => <tr key={r._key || r.key || r.name || i}>{columns.map(c => <td key={c.key}>{c.render ? c.render(r, i) : r[c.key]}</td>)}</tr>) : <tr><td colSpan={columns.length}><Empty text={empty}/></td></tr>}</tbody></table></div></div>; }
+function DataTable({ columns, rows, empty = 'Nessun risultato', meta = 'Dati aggiornati dal database', rowClassName }) { return <div className="table-card"><div className="table-meta"><b>{rows.length} righe</b><span>{meta}</span></div><div className="table-wrap"><table><thead><tr>{columns.map(c => <th key={c.key}>{c.label}</th>)}</tr></thead><tbody>{rows.length ? rows.map((r, i) => <tr className={rowClassName ? rowClassName(r, i) : ''} key={r._key || r.key || r.name || i}>{columns.map(c => <td key={c.key}>{c.render ? c.render(r, i) : r[c.key]}</td>)}</tr>) : <tr><td colSpan={columns.length}><Empty text={empty}/></td></tr>}</tbody></table></div></div>; }
+function InventoryBadge({ item }) { const status = item?.inventory_status || 'da_verificare'; const label = item?.inventory_badge || 'da verificare'; return <span className={`inventory-badge ${status}`}>{label}</span>; }
+function inventoryRowClass(r) { return `inventory-row ${r?.inventory_status || 'da_verificare'}`; }
+const inventoryFilterLabel = {
+  all: 'Tutti',
+  attivo: 'Attivi',
+  da_verificare: 'Da verificare',
+  mai_acquistato: 'Mai acquistati',
+  esaurito: 'Esauriti',
+  sotto_scorta: 'Sotto scorta'
+};
 function PageTitle({ title, desc, children }) { return <div className="page-title"><div><p>Gestionale artigianale</p><h1>{title}</h1><span>{desc}</span></div>{children}</div>; }
 function FlowPill({ n, title, desc, detail, icon: Icon, active }) { return <div className={`flow-pill ${active ? 'active' : ''}`}><div className="flow-pill-top"><b>{n}</b>{Icon && <Icon />}</div><div className="flow-pill-copy"><span>{title}</span><small>{desc}</small>{detail && <em>{detail}</em>}</div></div>; }
 
@@ -208,16 +218,22 @@ function Atelier({ go }) { return <>
 
 function Materials({ toast }) {
   const { data: items, loading, error, refresh } = useApi('/inventory', []);
+  const { data: quality } = useApi('/inventory/quality', {});
   const { data: opt } = useApi('/options', {});
   const { data: sug, refresh: refreshSug } = useApi('/suggestions', {});
   const [q, setQ] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [f, setF] = useState({ section: 'Falegnameria', supplier: '', category: '', subcategory: '', size: '', thickness: '', unit: 'pz', quantity: 1, total_cost: 0 });
   const generated = useMemo(() => {
     const isWood = f.section === 'Falegnameria';
     const parts = isWood ? [f.subcategory || f.category, f.size, f.thickness] : [f.category, f.subcategory !== f.category ? f.subcategory : '', f.size, f.thickness];
     return parts.filter(Boolean).join(' ');
   }, [f]);
-  const rows = list(items).filter(x => [x.name, x.section, x.category, x.subcategory, x.supplier_details].join(' ').toLowerCase().includes(q.toLowerCase()));
+  const rows = list(items).filter(x => {
+    const matchesSearch = [x.name, x.section, x.category, x.subcategory, x.supplier_details, x.inventory_badge].join(' ').toLowerCase().includes(q.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || x.inventory_status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
   async function add(e) { e.preventDefault(); try { await postJSON('/purchase', { ...f, name: generated }); toast('Acquisto registrato'); setF(v => ({ ...v, quantity: 1, total_cost: 0, size: '', thickness: '' })); await refresh(); refreshSug(); } catch (e) { toast(e.message, 'err'); } }
   async function remove(r) { if (!confirm('Eliminare questo articolo?')) return; try { await del('/raw/' + encodeURIComponent(r.table) + '/' + encodeURIComponent(r.key)); toast('Articolo eliminato'); refresh(); } catch (e) { toast(e.message, 'err'); } }
   return <>
@@ -237,11 +253,27 @@ function Materials({ toast }) {
         <div className="name-preview"><span>Nome articolo</span><b>{generated || 'Si genera automaticamente'}</b><small>{f.supplier ? `collegato a ${f.supplier}` : 'aggiungi fornitore per tracciabilità'}</small></div>
       </form>
     </Card>
+    <div className="stats inventory-quality">
+      <Stat label="Attivi" value={quality.active || 0} sub="utilizzabili nei preventivi" icon={CheckCircle2} tone="mint" />
+      <Stat label="Da verificare" value={quality.to_check || 0} sub="stock presente ma costo mancante" icon={AlertTriangle} tone="wood" />
+      <Stat label="Mai acquistati" value={quality.never_purchased || 0} sub="preset non operativi" icon={Archive} tone="ink" />
+      <Stat label="Valore reale" value={money(quality.real_value)} sub="stock valorizzato" icon={CircleDollarSign} tone="cyan" />
+    </div>
     <Card title="Stock materiali" icon={Archive} action={<SearchBox value={q} onChange={setQ} placeholder="Cerca materiale, categoria o fornitore..." />}>
-      {loading ? <Skeleton /> : <DataTable rows={rows} empty="Nessun materiale caricato" columns={[
-        { key: 'name', label: 'Articolo' }, { key: 'section', label: 'Area' }, { key: 'category', label: 'Categoria' }, { key: 'subcategory', label: 'Variante' },
-        { key: 'qty', label: 'Stock', render: r => `${num(r.stock)} ${r.unit || ''}` }, { key: 'cost', label: 'Costo medio', render: r => money(r.cost_per_unit) },
-        { key: 'sup', label: 'Fornitori', render: r => <span className="muted-cell">{r.supplier_details || '—'}</span> }, { key: 'act', label: '', render: r => <button className="ghost danger" onClick={() => remove(r)}><Trash2 /></button> }
+      <div className="inventory-filters">
+        {Object.entries(inventoryFilterLabel).map(([key, label]) => <button key={key} className={statusFilter === key ? 'active' : ''} onClick={() => setStatusFilter(key)}>{label}</button>)}
+      </div>
+      {loading ? <Skeleton /> : <DataTable rows={rows} empty="Nessun materiale caricato" rowClassName={inventoryRowClass} columns={[
+        { key: 'status', label: 'Stato', render: r => <InventoryBadge item={r} /> },
+        { key: 'name', label: 'Articolo' },
+        { key: 'section', label: 'Area' },
+        { key: 'category', label: 'Categoria' },
+        { key: 'subcategory', label: 'Variante' },
+        { key: 'qty', label: 'Stock', render: r => `${num(r.stock)} ${r.unit || ''}` },
+        { key: 'cost', label: 'Costo medio', render: r => money(r.weighted_average_cost ?? r.cost_per_unit) },
+        { key: 'last', label: 'Ultimo acquisto', render: r => <span className="muted-cell">{r.last_supplier ? `${r.last_supplier} · ${money(r.last_unit_cost)}` : '—'}</span> },
+        { key: 'sup', label: 'Fornitori', render: r => <span className="muted-cell">{r.supplier_details || '—'}</span> },
+        { key: 'act', label: '', render: r => <button className="ghost danger" onClick={() => remove(r)}><Trash2 /></button> }
       ]} />}
     </Card>
   </>;
@@ -376,6 +408,7 @@ function Quote({ toast }) {
   const filteredMaterials = useMemo(() => {
     const q = materialSearch.toLowerCase().trim();
     return list(inv).filter(i => {
+      if (!i.usable_in_quote) return false;
       const text = [i.name, i.section, i.category, i.subcategory, i.supplier_details, i.unit, i.size, i.thickness].join(' ').toLowerCase();
       if (q && !q.split(/\s+/).every(part => text.includes(part))) return false;
       if (filters.supplier && !String(i.supplier_details || '').toLowerCase().includes(filters.supplier.toLowerCase())) return false;
@@ -387,7 +420,7 @@ function Quote({ toast }) {
   }, [inv, materialSearch, filters]);
 
   const selectedMaterial = list(inv).find(x => x.key === item);
-  const materialCost = selectedMaterial ? Number(selectedMaterial.cost_per_unit || 0) * Number(qty || 0) : 0;
+  const materialCost = selectedMaterial ? Number((selectedMaterial.weighted_average_cost ?? selectedMaterial.cost_per_unit) || 0) * Number(qty || 0) : 0;
   const supplierChoices = unique(list(inv).flatMap(i => String(i.supplier_details || '').split('|').map(x => x.split(':')[0].trim())));
   const sectionChoices = unique(list(inv).map(i => i.section));
   const categoryChoices = unique(list(inv).filter(i => !filters.section || i.section === filters.section).map(i => i.category));
@@ -400,10 +433,18 @@ function Quote({ toast }) {
       toast('Seleziona un materiale e una quantità valida', 'err');
       return;
     }
+    if (!it.usable_in_quote) {
+      toast('Materiale non utilizzabile: stock o costo medio non valorizzato', 'err');
+      return;
+    }
+    if (Number(it.stock || 0) < qn) {
+      toast(`Stock insufficiente: disponibile ${num(it.stock)} ${it.unit || ''}`, 'err');
+      return;
+    }
     setRows(v => [...v, {
       name: materialKey,
       qty: qn,
-      cost: qn * Number(it.cost_per_unit || 0),
+      cost: qn * Number((it.weighted_average_cost ?? it.cost_per_unit) || 0),
       label: it.name,
       unit: it.unit || '',
       category: it.category || '',
@@ -453,10 +494,10 @@ function Quote({ toast }) {
         </div>
         <div className="material-browser">
           {filteredMaterials.length ? filteredMaterials.map(m => <button type="button" key={m.key} className={item === m.key ? 'material-pick active' : 'material-pick'} onClick={() => setItem(m.key)}>
-            <span><b>{m.name}</b><small>{[m.section, m.category, m.subcategory, m.size, m.thickness].filter(Boolean).join(' · ')}</small></span>
+            <span><b>{m.name}</b><small>{[m.section, m.category, m.subcategory, m.size, m.thickness].filter(Boolean).join(' · ')}</small><InventoryBadge item={m} /></span>
             <em>{num(m.stock)} {m.unit || ''}</em>
-            <strong>{money(m.cost_per_unit)}</strong>
-          </button>) : <Empty text="Nessun materiale trovato" />}
+            <strong>{money(m.weighted_average_cost ?? m.cost_per_unit)}</strong>
+          </button>) : <Empty text="Nessun materiale disponibile per preventivi" />}
         </div>
       </Card>
 
