@@ -22,22 +22,28 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: |
-            frontend/package-lock.json
-            desktop/package-lock.json
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      - name: Install React frontend dependencies
+        shell: pwsh
+        run: |
+          cd frontend
+          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
+          if (Test-Path package-lock.json) {
+            npm ci --no-audit --no-fund
+          } else {
+            npm install --no-audit --no-fund
+          }
+
       - name: Build React frontend
         shell: pwsh
         run: |
           cd frontend
-          npm ci
-          npm run build
+          npx vite build
 
       - name: Build FastAPI backend executable
         shell: pwsh
@@ -55,13 +61,23 @@ jobs:
           Copy-Item backend/dist/MN_Laser_Lab_Backend.exe desktop/resources/backend/MN_Laser_Lab_Backend.exe -Force
           Copy-Item frontend/dist/* desktop/resources/frontend -Recurse -Force
 
+      - name: Install Electron dependencies
+        shell: pwsh
+        run: |
+          cd desktop
+          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
+          if (Test-Path package-lock.json) {
+            npm ci --no-audit --no-fund
+          } else {
+            npm install --no-audit --no-fund
+          }
+
       - name: Build Electron installer
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd desktop
-          npm ci
           npm run dist:win -- --publish never
 
       - name: Upload build artifact
