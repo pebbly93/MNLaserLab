@@ -22,15 +22,24 @@ function resourcePath(...parts) {
 }
 
 function backendExecutablePath() {
-  const exeName = process.platform === "win32"
-    ? "MN_Laser_Lab_Backend.exe"
-    : "MN_Laser_Lab_Backend";
+  const exeName =
+    process.platform === "win32"
+      ? "MN_Laser_Lab_Backend.exe"
+      : "MN_Laser_Lab_Backend";
 
   return resourcePath("backend", exeName);
 }
 
 function frontendDistPath() {
   return resourcePath("frontend");
+}
+
+function frontendIndexPath() {
+  if (isPackaged()) {
+    return path.join(process.resourcesPath, "frontend", "index.html");
+  }
+
+  return path.join(__dirname, "..", "frontend", "dist", "index.html");
 }
 
 function userDataDir() {
@@ -53,11 +62,12 @@ function writeLog(message) {
 
 function checkPackagedResources() {
   const backendExe = backendExecutablePath();
-  const frontendIndex = path.join(frontendDistPath(), "index.html");
+  const frontendIndex = frontendIndexPath();
 
+  writeLog(`app.isPackaged: ${isPackaged()}`);
   writeLog(`process.resourcesPath: ${process.resourcesPath}`);
   writeLog(`Backend path: ${backendExe}`);
-  writeLog(`Frontend path: ${frontendDistPath()}`);
+  writeLog(`Frontend folder: ${frontendDistPath()}`);
   writeLog(`Frontend index: ${frontendIndex}`);
 
   if (isPackaged()) {
@@ -71,7 +81,9 @@ function checkPackagedResources() {
     if (!fs.existsSync(frontendIndex)) {
       return {
         ok: false,
-        message: `Frontend non trovato:\n${frontendIndex}\n\nManca index.html nella cartella resources/frontend.`
+        message:
+          `Frontend non trovato:\n${frontendIndex}\n\n` +
+          "Manca index.html nella cartella resources/frontend."
       };
     }
   }
@@ -155,9 +167,16 @@ async function waitForBackend(timeoutMs = 30000) {
   return false;
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function createErrorHtml(title, details) {
-  const safeTitle = String(title || "").replace(/[<>&]/g, "");
-  const safeDetails = String(details || "").replace(/[<>&]/g, "");
+  const safeTitle = escapeHtml(title);
+  const safeDetails = escapeHtml(details);
 
   return `
     <!doctype html>
@@ -177,15 +196,21 @@ function createErrorHtml(title, details) {
             justify-content: center;
           }
           .box {
-            width: min(760px, calc(100vw - 48px));
+            width: min(820px, calc(100vw - 48px));
             background: rgba(15, 23, 42, 0.88);
             border: 1px solid rgba(148, 163, 184, 0.35);
             border-radius: 24px;
             padding: 28px;
             box-shadow: 0 24px 80px rgba(0,0,0,0.45);
           }
-          h1 { margin: 0 0 12px; font-size: 26px; }
-          p { color: #cbd5e1; line-height: 1.5; }
+          h1 {
+            margin: 0 0 12px;
+            font-size: 26px;
+          }
+          p {
+            color: #cbd5e1;
+            line-height: 1.5;
+          }
           pre {
             white-space: pre-wrap;
             background: rgba(2, 6, 23, 0.65);
@@ -193,6 +218,7 @@ function createErrorHtml(title, details) {
             border-radius: 14px;
             color: #e2e8f0;
             overflow: auto;
+            max-height: 360px;
           }
           button {
             margin-top: 14px;
@@ -209,7 +235,7 @@ function createErrorHtml(title, details) {
       <body>
         <div class="box">
           <h1>${safeTitle}</h1>
-          <p>L'app non è riuscita a caricare correttamente l'interfaccia. Dettagli tecnici:</p>
+          <p>L'app non è riuscita a caricare correttamente l'interfaccia.</p>
           <pre>${safeDetails}</pre>
           <button onclick="location.reload()">Riprova</button>
         </div>
@@ -218,7 +244,16 @@ function createErrorHtml(title, details) {
   `;
 }
 
-function createWindow() {
+function loadErrorPage(title, details) {
+  if (!mainWindow) return;
+
+  mainWindow.loadURL(
+    "data:text/html;charset=utf-8," +
+      encodeURIComponent(createErrorHtml(title, details))
+  );
+}
+
+function createWindow(backendReady) {
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 900,
@@ -239,19 +274,56 @@ function createWindow() {
     mainWindow.show();
   });
 
-  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
-    const msg = `Caricamento fallito\nURL: ${validatedURL}\nCodice: ${errorCode}\nErrore: ${errorDescription}`;
-    writeLog(msg);
-    mainWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(
-      createErrorHtml("Errore caricamento interfaccia", msg)
-    ));
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    const key = String(input.key || "").toLowerCase();
+
+    if (
+      input.key === "F12" ||
+      (input.control && input.shift && key === "i")
+    ) {
+      mainWindow.webContents.toggleDevTools();
+      event.preventDefault();
+    }
   });
 
-  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    writeLog(`Console level ${level}: ${message} (${sourceId}:${line})`);
-  });
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, errorDescription, validatedURL) => {
+      const msg =
+        `Caricamento fallito\n` +
+        `URL: ${validatedURL}\n` +
+        `Codice: ${errorCode}\n` +
+        `Errore: ${errorDescription}`;
 
-  mainWindow.loadURL(APP_URL);
+      writeLog(msg);
+      loadErrorPage("Errore caricamento interfaccia", msg);
+    }
+  );
+
+  mainWindow.webContents.on(
+    "console-message",
+    (_event, level, message, line, sourceId) => {
+      writeLog(`Console level ${level}: ${message} (${sourceId}:${line})`);
+    }
+  );
+
+  const indexPath = frontendIndexPath();
+
+  writeLog(`Tentativo caricamento frontend locale: ${indexPath}`);
+  writeLog(`Backend ready: ${backendReady}`);
+
+  if (fs.existsSync(indexPath)) {
+    mainWindow.loadFile(indexPath);
+  } else if (backendReady) {
+    mainWindow.loadURL(APP_URL);
+  } else {
+    loadErrorPage(
+      "Frontend non trovato",
+      `Non trovo il file index.html:\n${indexPath}\n\n` +
+        `Backend disponibile: ${backendReady}\n` +
+        `Cartella log:\n${logDir()}`
+    );
+  }
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -263,7 +335,10 @@ function setupAppMenu() {
     {
       label: "MN Laser Lab Manager",
       submenu: [
-        { label: "Controlla aggiornamenti", click: () => checkForUpdatesManual() },
+        {
+          label: "Controlla aggiornamenti",
+          click: () => checkForUpdatesManual()
+        },
         { type: "separator" },
         { label: "Esci", role: "quit" }
       ]
@@ -290,13 +365,21 @@ async function checkForUpdatesManual() {
     dialog.showMessageBox(mainWindow, {
       type: "info",
       title: "Aggiornamenti",
-      message: "Gli aggiornamenti automatici funzionano nella versione installata, non in sviluppo."
+      message:
+        "Gli aggiornamenti automatici funzionano nella versione installata, non in sviluppo."
     });
     return;
   }
 
   try {
     const { autoUpdater } = require("electron-updater");
+
+    autoUpdater.setFeedURL({
+      provider: "github",
+      owner: "pebbly93",
+      repo: "MNLaserLab"
+    });
+
     const result = await autoUpdater.checkForUpdates();
 
     if (!result || !result.updateInfo) {
@@ -320,35 +403,54 @@ function setupAutoUpdater() {
 
   try {
     const { autoUpdater } = require("electron-updater");
+
+    autoUpdater.setFeedURL({
+      provider: "github",
+      owner: "pebbly93",
+      repo: "MNLaserLab"
+    });
+
     autoUpdater.autoDownload = false;
 
     autoUpdater.on("update-available", () => {
-      dialog.showMessageBox(mainWindow, {
-        type: "info",
-        title: "Aggiornamento disponibile",
-        message: "È disponibile una nuova versione di MN Laser Lab Manager.",
-        buttons: ["Scarica aggiornamento", "Più tardi"]
-      }).then(({ response }) => {
-        if (response === 0) autoUpdater.downloadUpdate();
-      });
+      dialog
+        .showMessageBox(mainWindow, {
+          type: "info",
+          title: "Aggiornamento disponibile",
+          message: "È disponibile una nuova versione di MN Laser Lab Manager.",
+          buttons: ["Scarica aggiornamento", "Più tardi"]
+        })
+        .then(({ response }) => {
+          if (response === 0) autoUpdater.downloadUpdate();
+        });
+    });
+
+    autoUpdater.on("update-not-available", () => {
+      writeLog("Nessun aggiornamento disponibile.");
     });
 
     autoUpdater.on("update-downloaded", () => {
-      dialog.showMessageBox(mainWindow, {
-        type: "info",
-        title: "Aggiornamento pronto",
-        message: "Aggiornamento scaricato. Vuoi riavviare e installarlo ora?",
-        buttons: ["Riavvia e installa", "Dopo"]
-      }).then(({ response }) => {
-        if (response === 0) autoUpdater.quitAndInstall();
-      });
+      dialog
+        .showMessageBox(mainWindow, {
+          type: "info",
+          title: "Aggiornamento pronto",
+          message: "Aggiornamento scaricato. Vuoi riavviare e installarlo ora?",
+          buttons: ["Riavvia e installa", "Dopo"]
+        })
+        .then(({ response }) => {
+          if (response === 0) autoUpdater.quitAndInstall();
+        });
     });
 
     autoUpdater.on("error", (err) => {
       writeLog(`Errore aggiornamento: ${err == null ? "" : err.message}`);
     });
 
-    setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5000);
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch((err) => {
+        writeLog(`Check update automatico fallito: ${err.message}`);
+      });
+    }, 5000);
   } catch (err) {
     writeLog(`Auto-update non inizializzato: ${err.message}`);
   }
@@ -365,36 +467,35 @@ app.whenReady().then(async () => {
   writeLog("Avvio applicazione.");
 
   const resourcesCheck = checkPackagedResources();
+
   if (!resourcesCheck.ok) {
+    writeLog(`Risorse mancanti: ${resourcesCheck.message}`);
     dialog.showErrorBox("Risorse mancanti", resourcesCheck.message);
   }
 
   const backendStarted = startBackend();
 
   let backendReady = false;
+
   if (backendStarted) {
     backendReady = await waitForBackend();
   }
 
   setupAppMenu();
 
+  createWindow(backendReady);
+
   if (!backendReady) {
-    createWindow();
-    mainWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(
-      createErrorHtml(
-        "Backend non avviato",
-        `Non riesco ad avviare FastAPI su ${HEALTH_URL}.\n\nControlla i log in:\n${logDir()}`
-      )
-    ));
-  } else {
-    createWindow();
+    writeLog("Backend non pronto, ma provo comunque a mostrare il frontend locale.");
   }
 
   setupAutoUpdater();
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
 });
 
 app.on("before-quit", () => {
