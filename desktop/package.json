@@ -56,8 +56,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "TUO_USERNAME_GITHUB",
-        "repo": "mn-laser-lab-manager"
+        "owner": "pebbly93",
+        "repo": "MNLaserLab"
       }
     ]
   }
