@@ -830,7 +830,13 @@ function App() {
   useEffect(() => { localStorage.setItem('mnll_theme', theme); document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => { const on = e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(true); } }; window.addEventListener('keydown', on); return () => window.removeEventListener('keydown', on); }, []);
   useEffect(() => { const on = () => go('settings'); window.addEventListener('mnll-go-settings', on); return () => window.removeEventListener('mnll-go-settings', on); }, []);
-  return <div className={`app full-mode theme-${theme}`}><LaserBackdrop/><button className="mobile" onClick={()=>setMobile(!mobile)}>{mobile ? <X/> : <Menu/>}</button><aside className={mobile ? 'open' : ''}><div className="brand"><img src="/mn_laser_lab_logo.png"/><div><b>MN Laser Lab</b><span>Versione v39.0 Professional</span></div></div><button className="command" onClick={()=>setCmd(true)}><Command/> Cerca <kbd>⌘K</kbd></button><nav>{nav.map(n=><button key={n.id} className={tab===n.id?'active':''} onClick={()=>go(n.id)}><n.icon/>{n.label}</button>)}</nav><FocusStrip go={go}/><div className="side-note"><b>Flusso operativo</b><br/>Acquisti → Produzione → Preventivi → Vendite. Backup, import ed export sono in Impostazioni.</div></aside><main><div className="top-right-tools"><button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Cambia modalità colore"><Sun/><span></span><Moon/></button></div><div className="content-main"><Page go={go} toast={push}/></div></main><Toasts/><CommandPalette open={cmd} setOpen={setCmd} nav={nav} go={go}/></div>;
+  return <div className={`app full-mode theme-${theme}`}><LaserBackdrop/><button className="mobile" onClick={()=>setMobile(!mobile)}>{mobile ? <X/> : <Menu/>}</button><aside className={mobile ? 'open' : ''}><div className="brand">
+  <img src={`${import.meta.env.BASE_URL}mn_laser_lab_logo.png`} alt="MN Laser Lab" />
+  <div>
+    <b>MN Laser Lab</b>
+    <span>Versione v39.0 Professional</span>
+  </div>
+</div><button className="command" onClick={()=>setCmd(true)}><Command/> Cerca <kbd>⌘K</kbd></button><nav>{nav.map(n=><button key={n.id} className={tab===n.id?'active':''} onClick={()=>go(n.id)}><n.icon/>{n.label}</button>)}</nav><FocusStrip go={go}/><div className="side-note"><b>Flusso operativo</b><br/>Acquisti → Produzione → Preventivi → Vendite. Backup, import ed export sono in Impostazioni.</div></aside><main><div className="top-right-tools"><button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Cambia modalità colore"><Sun/><span></span><Moon/></button></div><div className="content-main"><Page go={go} toast={push}/></div></main><Toasts/><CommandPalette open={cmd} setOpen={setCmd} nav={nav} go={go}/></div>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);
