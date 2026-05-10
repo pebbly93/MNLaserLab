@@ -5,18 +5,39 @@ title MN Laser Lab Manager - Browser Edition
 
 cd /d "%~dp0"
 
-echo Avvio MN Laser Lab Manager Browser Edition...
+echo ============================================================
+echo  MN Laser Lab Manager - Browser Edition
+echo ============================================================
 echo.
 
-if exist "MN_Laser_Lab_Browser.exe" (
-    start "" "MN_Laser_Lab_Browser.exe"
-    exit /b 0
-)
+set MN_OPEN_BROWSER=1
+set MN_BACKEND_HOST=0.0.0.0
+set MN_BACKEND_PORT=8000
 
-if exist "backend\.venv\Scripts\python.exe" (
-    backend\.venv\Scripts\python.exe backend\mn_laser_browser_launcher.py
+if exist "MN_Laser_Lab_Browser\MN_Laser_Lab_Browser.exe" (
+    echo Avvio da cartella onedir...
+    echo.
+    "MN_Laser_Lab_Browser\MN_Laser_Lab_Browser.exe"
+    echo.
+    echo L'app si e' chiusa. Codice errore: %ERRORLEVEL%
+    pause
     exit /b %ERRORLEVEL%
 )
 
-python backend\mn_laser_browser_launcher.py
+if exist "MN_Laser_Lab_Browser.exe" (
+    echo Avvio EXE singolo...
+    echo.
+    "MN_Laser_Lab_Browser.exe"
+    echo.
+    echo L'app si e' chiusa. Codice errore: %ERRORLEVEL%
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+echo ERRORE: eseguibile non trovato.
+echo Cerca:
+echo - MN_Laser_Lab_Browser\MN_Laser_Lab_Browser.exe
+echo - MN_Laser_Lab_Browser.exe
+echo.
 pause
+exit /b 1

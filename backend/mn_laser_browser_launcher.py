@@ -109,11 +109,23 @@ def main():
             log_level="info",
             access_log=True,
         )
-    except Exception:
+    except Exception as exc:
         err = traceback.format_exc()
         log(err)
+        print(err)
+        _fatal_pause_on_windows()
         raise
 
 
 if __name__ == "__main__":
     main()
+
+
+# v42.0.7 fatal startup diagnostics
+def _fatal_pause_on_windows():
+    import os
+    if os.name == "nt":
+        try:
+            input("\nErrore all'avvio. Premi INVIO per chiudere...")
+        except Exception:
+            pass

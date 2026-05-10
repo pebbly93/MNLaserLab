@@ -38,7 +38,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements_browser.txt
 
-      - name: Build browser launcher exe
+      - name: Build browser launcher onedir
         run: |
           pyinstaller mn_laser_lab_browser.spec --clean --noconfirm
 
@@ -46,10 +46,9 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path package | Out-Null
-          Copy-Item dist\MN_Laser_Lab_Browser.exe package\MN_Laser_Lab_Browser.exe
+          Copy-Item dist\MN_Laser_Lab_Browser package\MN_Laser_Lab_Browser -Recurse
           Copy-Item Avvia_MN_Laser_Lab_Browser_Windows.bat package\Avvia_MN_Laser_Lab_Browser_Windows.bat
-          Copy-Item Avvia_MN_Laser_Lab_Browser_Windows.ps1 package\Avvia_MN_Laser_Lab_Browser_Windows.ps1
-          Copy-Item README.md package\README.txt -ErrorAction SilentlyContinue
+          Copy-Item Avvia_MN_Laser_Lab_Browser_Windows.ps1 package\Avvia_MN_Laser_Lab_Browser_Windows.ps1 -ErrorAction SilentlyContinue
           Compress-Archive -Path package\* -DestinationPath MN_Laser_Lab_Browser_Windows.zip -Force
 
       - name: Upload artifact
