@@ -520,7 +520,7 @@ function ProductionBox({ products, refresh, toast }) {
   </div>;
 }
 
-function ProductWarehouse({ products, refresh, toast, onEdit, onDelete }) {
+function ProductWarehouse({ products, refresh, toast, onEdit, onDelete, onDuplicate }) {
   const [q, setQ] = useState('');
   const [movement, setMovement] = useState({ product: '', qty: '', reason: 'Rettifica inventario', note: '' });
   const [productDetail, setProductDetail] = useState(null);
@@ -567,6 +567,7 @@ function ProductWarehouse({ products, refresh, toast, onEdit, onDelete }) {
         { key: 'value', label: 'Valore stock', render: r => money(r.value) },
         { key: 'act', label: 'Azioni', render: r => <div className="table-actions">
           <button className="ghost" onClick={() => openProductDetail(r.name)}>Dettaglio</button>
+          <button className="ghost" onClick={() => onDuplicate(r)}>Duplica</button>
           <button className="ghost" onClick={() => onEdit(r)}>Modifica</button>
           <button className="ghost danger" onClick={() => onDelete(r.name)}>Elimina</button>
         </div> }
@@ -627,12 +628,52 @@ function Products({ toast }) {
   const [area, setArea] = useState('warehouse');
   const [p, setP] = useState({ name: '', section: 'Prodotti Finiti / Semilavorati', category: '', subcategory: '', collection: '', unit: 'pz', stock: '', labor_hours: '', hourly_rate: '', extra_unit_cost: '', bom: [] });
   const [bom, setBom] = useState({ name: '', qty: '1' });
+  const [duplicateProduct, setDuplicateProduct] = useState(null);
+  const [duplicateName, setDuplicateName] = useState('');
   const rows = list(products).filter(x => [x.name, x.category, x.subcategory, x.collection].join(' ').toLowerCase().includes(q.toLowerCase()));
   const selectedProduct = list(products).find(x => x.name === p.name);
   async function save(e) { e.preventDefault(); try { await postJSON('/products', p); toast('Scheda prodotto salvata'); setP(v => ({ ...v, name: '', stock: '', bom: [] })); refresh(); refreshSug(); } catch (e) { toast(e.message, 'err'); } }
   async function remove(name) { if (!confirm('Eliminare prodotto?')) return; try { await del('/products/' + encodeURIComponent(name)); toast('Prodotto eliminato'); refresh(); } catch (e) { toast(e.message, 'err'); } }
   function addBom() { if (!bom.name || Number(bom.qty || 0) <= 0) return; setP({ ...p, bom: [...(p.bom || []), { name: bom.name, qty: Number(bom.qty) }] }); setBom({ name: '', qty: '1' }); }
   function editProduct(r) { setP({ ...r, old_name: r.name, bom: r.bom || [], stock: String(r.stock ?? '') }); setArea('sheet'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+  function openDuplicateProduct(r) {
+    setDuplicateProduct(r);
+    setDuplicateName(`${r.name} - variante`);
+  }
+
+  async function saveDuplicateProduct() {
+    if (!duplicateProduct || !duplicateName.trim()) {
+      toast('Inserisci il nome della variante', 'err');
+      return;
+    }
+
+    const payload = {
+      ...duplicateProduct,
+      old_name: duplicateName.trim(),
+      name: duplicateName.trim(),
+      stock: 0,
+      bom: duplicateProduct.bom || [],
+      description: duplicateProduct.description || '',
+    };
+
+    delete payload.value;
+    delete payload.unit_cost;
+    delete payload.material_unit_cost;
+    delete payload.labor_unit_cost;
+
+    try {
+      await postJSON('/products', payload);
+      toast('Variante prodotto creata');
+      setDuplicateProduct(null);
+      setDuplicateName('');
+      await refresh();
+      await refreshSug();
+      setArea('sheet');
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
   const movementRows = list(movements).slice(0, 12);
   return <>
     <PageTitle title="Produzione" desc="Gestisci schede prodotto, distinta base, produzione e magazzino dei prodotti finiti MN Laser Lab." />
@@ -642,7 +683,7 @@ function Products({ toast }) {
       <button className={area === 'produce' ? 'active' : ''} onClick={() => setArea('produce')}>Produci</button>
       <button className={area === 'movements' ? 'active' : ''} onClick={() => setArea('movements')}>Movimenti</button>
     </div>
-    {area === 'warehouse' && <ProductWarehouse products={products} refresh={() => { refresh(); refreshMovements(); }} toast={toast} onEdit={editProduct} onDelete={remove} />}
+    {area === 'warehouse' && <ProductWarehouse products={products} refresh={() => { refresh(); refreshMovements(); }} toast={toast} onEdit={editProduct} onDelete={remove} onDuplicate={openDuplicateProduct} />}
     {area === 'sheet' && <div className="split-main">
       <Card title="Scheda prodotto" icon={Factory} sub="Una creazione MN Laser Lab non dipende da un fornitore: dipende da BOM, tempo, stile e magazzino interno." action={<button className="primary" form="product"><Save /> Salva</button>}>
         <form id="product" onSubmit={save} className="form-grid">
@@ -670,6 +711,41 @@ function Products({ toast }) {
         { key: 'date', label: 'Data' }, { key: 'product', label: 'Prodotto' }, { key: 'qty', label: 'Quantità', render: r => `${Number(r.qty || 0) > 0 ? '+' : ''}${num(r.qty)}` }, { key: 'reason', label: 'Causale' }, { key: 'note', label: 'Nota' }
       ]} />
     </Card>}
+    {duplicateProduct && <DetailModal title="Crea variante prodotto" subtitle="Duplica una scheda esistente mantenendo categoria, collezione, costi e distinta base. Lo stock iniziale della variante sarà 0." icon={PackagePlus} onClose={() => setDuplicateProduct(null)}>
+      <div className="duplicate-product-modal">
+        <div className="detail-hero">
+          <div>
+            <span>Prodotto origine</span>
+            <strong>{duplicateProduct.name}</strong>
+            <small>{[duplicateProduct.category, duplicateProduct.subcategory, duplicateProduct.collection].filter(Boolean).join(' · ') || 'Scheda prodotto'}</small>
+          </div>
+          <span className="quote-status sent">variante</span>
+        </div>
+
+        <div className="form-grid">
+          <Input label="Nome nuova variante" value={duplicateName} onChange={e => setDuplicateName(e.target.value)} />
+          <Input label="Stock iniziale" value="0" disabled />
+        </div>
+
+        <div className="duplicate-summary">
+          <div><span>Categoria</span><b>{duplicateProduct.category || '—'}</b></div>
+          <div><span>Sottocategoria</span><b>{duplicateProduct.subcategory || '—'}</b></div>
+          <div><span>Collezione</span><b>{duplicateProduct.collection || '—'}</b></div>
+          <div><span>Materiali BOM</span><b>{list(duplicateProduct.bom).length}</b></div>
+        </div>
+
+        <div className="notice">
+          <CheckCircle2 />
+          La variante copierà distinta base, costi lavoro, costi extra, categoria e collezione. Potrai modificarla subito dopo dalla scheda prodotto.
+        </div>
+
+        <div className="quick-actions">
+          <button className="primary" onClick={saveDuplicateProduct}><Save /> Crea variante</button>
+          <button className="ghost" onClick={() => setDuplicateProduct(null)}>Annulla</button>
+        </div>
+      </div>
+    </DetailModal>}
+
     {area !== 'warehouse' && <Card title="Catalogo produzione" icon={PackageCheck} action={<SearchBox value={q} onChange={setQ} placeholder="Cerca prodotto..." />}>
       <DataTable rows={rows} empty="Nessun prodotto creato" meta="Schede prodotto MN Laser Lab" columns={[
         { key: 'name', label: 'Prodotto' }, { key: 'category', label: 'Categoria' }, { key: 'subcategory', label: 'Tipo' }, { key: 'collection', label: 'Collezione' },

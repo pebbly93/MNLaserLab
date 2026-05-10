@@ -1668,3 +1668,51 @@ button svg {
     align-items: flex-start;
   }
 }
+
+
+/* v40.1 duplicate product */
+.duplicate-product-modal {
+  display: grid;
+  gap: 18px;
+}
+
+.duplicate-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.duplicate-summary > div {
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(255,255,255,.055);
+  border-radius: 18px;
+  padding: 14px;
+  min-height: 84px;
+}
+
+.duplicate-summary span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 6px;
+}
+
+.duplicate-summary b {
+  display: block;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+@media (max-width: 950px) {
+  .duplicate-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .duplicate-summary {
+    grid-template-columns: 1fr;
+  }
+}
