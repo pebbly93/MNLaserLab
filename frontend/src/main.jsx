@@ -500,14 +500,14 @@ function ProductionBox({ products, refresh, toast }) {
             </div>}
 
             {!selected && <>
-              <h4>Alternative consigliate</h4>
+              <h4>Alternative consigliate in base a categoria, formato, spessore e stock</h4>
               {list(row.variants).length ? <div className="variant-grid">
                 {list(row.variants).map(v => <button key={v.table + v.key} type="button" className="variant-card" onClick={() => chooseVariant(row, v)}>
                   <div>
                     <b>{v.name}</b>
                     <small>{[v.category, v.subcategory, v.size, v.thickness].filter(Boolean).join(' · ')}</small>
                   </div>
-                  <span>{num(v.stock)} {v.unit || ''}</span>
+                  <span>Stock: {num(v.stock)} {v.unit || ''}</span>
                   <em>{v.notes}</em>
                   <strong>{v.can_cover ? 'Copre produzione' : 'Stock parziale'}</strong>
                 </button>)}
