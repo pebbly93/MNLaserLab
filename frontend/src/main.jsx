@@ -669,7 +669,7 @@ function ProductWarehouse({ products, refresh, toast, onEdit, onDelete, onDuplic
       <Stat label="Valore magazzino" value={money(totalValue)} sub="costo interno" icon={CircleDollarSign} tone="cyan" />
       <Stat label="Da controllare" value={lowStock} sub="stock ≤ 1" icon={AlertTriangle} tone="wood" />
     </div>
-    <Card title="Movimento magazzino prodotti" icon={PackageCheck} sub="Usalo per rettifiche manuali, campioni, pezzi danneggiati o carichi non generati da produzione.">
+    <Card title="Movimento magazzino prodotti" icon={PackageCheck} >
       <div className="form-grid stock-form">
         <Select label="Prodotto" value={movement.product} onChange={e => setMovement({ ...movement, product: e.target.value })}><option value="">Scegli prodotto</option>{list(products).map(p => <option key={p.name}>{p.name}</option>)}</Select>
         <Input label="Quantità" type="number" step="0.01" value={movement.qty} onChange={e => setMovement({ ...movement, qty: e.target.value })} />
@@ -795,7 +795,7 @@ function Products({ toast }) {
   }
   const movementRows = list(movements).slice(0, 12);
   return <>
-    <PageTitle title="Produzione" desc="Gestisci schede prodotto, distinta base, produzione e magazzino dei prodotti finiti MN Laser Lab." />
+    <PageTitle title="Produzione" desc="Gestisci prodotti, distinta base, produzione e magazzino." />
     <div className="section-tabs">
       <button className={area === 'warehouse' ? 'active' : ''} onClick={() => setArea('warehouse')}>Magazzino prodotti</button>
       <button className={area === 'sheet' ? 'active' : ''} onClick={() => setArea('sheet')}>Scheda prodotto e BOM</button>
@@ -824,7 +824,7 @@ function Products({ toast }) {
         <div className="bom-list">{(p.bom || []).length ? p.bom.map((r, i) => <span key={i}>{r.name} × {r.qty}<button onClick={() => setP({ ...p, bom: p.bom.filter((_, j) => j !== i) })}>×</button></span>) : <Empty text="Nessun materiale nel BOM" />}</div>
       </Card>
     </div>}
-    {area === 'produce' && <Card title="Produzione rapida" icon={Hammer} sub="Controlla disponibilità materiali, produci e carica automaticamente il magazzino prodotti finiti."><ProductionBox products={products} refresh={() => { refresh(); refreshMovements(); }} toast={toast} /></Card>}
+    {area === 'produce' && <Card title="Produzione rapida" icon={Hammer} ><ProductionBox products={products} refresh={() => { refresh(); refreshMovements(); }} toast={toast} /></Card>}
     {area === 'movements' && <Card title="Ultimi movimenti prodotti" icon={Archive} sub="Storico carichi, scarichi manuali e produzioni registrate.">
       <DataTable rows={movementRows} empty="Nessun movimento registrato" columns={[
         { key: 'date', label: 'Data' }, { key: 'product', label: 'Prodotto' }, { key: 'qty', label: 'Quantità', render: r => `${Number(r.qty || 0) > 0 ? '+' : ''}${num(r.qty)}` }, { key: 'reason', label: 'Causale' }, { key: 'note', label: 'Nota' }
@@ -1074,7 +1074,7 @@ function Quote({ toast }) {
   };
 
   return <>
-    <PageTitle title="Preventivi" desc="Costruisci il prezzo partendo dai materiali reali del magazzino, poi aggiungi lavoro, consumi, commissioni e margine." />
+    <PageTitle title="Preventivi" desc="Calcola prezzi e margini partendo dai materiali reali." />
 
     <Card title="Dati preventivo" icon={FileJson} sub="Salva bozze, invia preventivi e trasformali in prodotti finiti quando diventano ripetibili.">
       <div className="form-grid">
@@ -1089,7 +1089,7 @@ function Quote({ toast }) {
     </Card>
 
     <div className="quote-layout">
-      <Card title="Ricerca rapida materiali" icon={Search} sub="Cerca nel magazzino per nome, categoria, fornitore, formato o spessore. Aggiungi i materiali al preventivo con un click.">
+      <Card title="Ricerca rapida materiali" icon={Search} >
         <div className="quote-search-head">
           <SearchBox value={materialSearch} onChange={setMaterialSearch} placeholder="Cerca: betulla 40x40, led, acrilico nero, fornitore..." />
           <button className="ghost" onClick={() => { setMaterialSearch(''); setFilters({ supplier: '', section: '', category: '', subcategory: '' }); }}><RefreshCcw /> Pulisci</button>
@@ -1109,7 +1109,7 @@ function Quote({ toast }) {
         </div>
       </Card>
 
-      <Card title="Materiali nel preventivo" icon={Boxes} sub="Seleziona un materiale dalla ricerca, imposta la quantità e aggiungilo al calcolo.">
+      <Card title="Materiali nel preventivo" icon={Boxes} >
         <div className="selected-material-box">
           {selectedMaterial ? <>
             <span>Materiale selezionato</span>
@@ -1396,9 +1396,9 @@ function Setup({ toast }) {
   };
 
   return <>
-    <PageTitle title="Catalogo" desc="Gestione guidata: scegli l’area, poi categoria e sottocategoria. Formati, spessori e tipologie restano collegati al contesto corretto." />
+    <PageTitle title="Catalogo" desc="Gestisci aree, categorie, sottocategorie e configurazioni collegate." />
 
-    <Card title="Gestione catalogo" icon={Settings2} sub="Struttura più ordinata per evitare valori fuori contesto, come 12V dentro Falegnameria/Legname.">
+    <Card title="Gestione catalogo" icon={Settings2} >
       <div className="catalog-topbar">
         <div className="catalog-mode-tabs">
           <button className={mode === 'raw' ? 'active' : ''} onClick={() => setMode('raw')}>Materiali e componenti</button>
@@ -1594,9 +1594,9 @@ function People({ toast }) {
   }));
   const customerRows = Object.entries(people.customers || {}).map(([name, info]) => ({ name, notes: info.notes || '' }));
   return <>
-    <PageTitle title="Clienti e fornitori" desc="Sezione dedicata ai contatti: fornitori per acquistare materiali, clienti per preventivi e vendite." />
+    <PageTitle title="Clienti e fornitori" desc="Gestisci fornitori, clienti e collegamenti al catalogo." />
     <div className="split-main">
-      <Card title="Nuovo fornitore" icon={Truck} sub="Collega il fornitore a un’area e, quando possibile, alla categoria/sottocategoria che vende. Così negli acquisti non vedrai più suggerimenti generici." action={<button className="primary" form="supplier-form"><Save /> Salva collegamento</button>}>
+      <Card title="Nuovo fornitore" icon={Truck}  action={<button className="primary" form="supplier-form"><Save /> Salva collegamento</button>}>
         <form id="supplier-form" onSubmit={saveSupplier} className="form-grid">
           <SmartInput label="Nome fornitore" options={sug.suppliers} value={supplier.name} onChange={e=>setSupplier({...supplier,name:e.target.value})}/>
           <Select label="Area collegata" value={supplier.section} onChange={e=>setSupplier({...supplier,section:e.target.value,category:'',subcategory:''})}>{list(opt.raw_sections).map(x=><option key={x}>{x}</option>)}</Select>
@@ -1604,7 +1604,7 @@ function People({ toast }) {
           <SmartInput label="Sottocategoria fornita" options={rawSubs(sug, supplier.section, supplier.category)} value={supplier.subcategory} onChange={e=>setSupplier({...supplier,subcategory:e.target.value})} />
         </form>
       </Card>
-      <Card title="Nuovo cliente" icon={Users} sub="Usa i clienti per preventivi, vendite e storico lavori personalizzati." action={<button className="primary" form="customer-form"><Save /> Salva cliente</button>}>
+      <Card title="Nuovo cliente" icon={Users}  action={<button className="primary" form="customer-form"><Save /> Salva cliente</button>}>
         <form id="customer-form" onSubmit={saveCustomer} className="form-grid">
           <SmartInput label="Nome cliente" options={sug.customers} value={customer.name} onChange={e=>setCustomer({...customer,name:e.target.value})}/>
           <Input label="Note" value={customer.notes} onChange={e=>setCustomer({...customer,notes:e.target.value})}/>
@@ -1905,7 +1905,7 @@ function App() {
     <b>MN Laser Lab</b>
     <span>Versione v39.0 Professional</span>
   </div>
-</div><button className="command" onClick={()=>setCmd(true)}><Command/> Cerca <kbd>⌘K</kbd></button><nav>{nav.map(n=><button key={n.id} className={tab===n.id?'active':''} onClick={()=>go(n.id)}><n.icon/>{n.label}</button>)}</nav><FocusStrip go={go}/><div className="side-note"><b>Flusso operativo</b><br/>Acquisti → Produzione → Preventivi → Vendite. Backup, import ed export sono in Impostazioni.</div></aside><main><div className="top-right-tools"><button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Cambia modalità colore"><Sun/><span></span><Moon/></button></div><div className="content-main"><Page go={go} toast={push}/></div></main><Toasts/><CommandPalette open={cmd} setOpen={setCmd} nav={nav} go={go}/></div>;
+</div><button className="command" onClick={()=>setCmd(true)}><Command/> Cerca <kbd>⌘K</kbd></button><nav>{nav.map(n=><button key={n.id} className={tab===n.id?'active':''} onClick={()=>go(n.id)}><n.icon/>{n.label}</button>)}</nav><FocusStrip go={go}/><div className="side-note"><b>Flusso operativo</b><br/>Acquisti → Produzione → Preventivi → Vendite.</div></aside><main><div className="top-right-tools"><button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Cambia modalità colore"><Sun/><span></span><Moon/></button></div><div className="content-main"><Page go={go} toast={push}/></div></main><Toasts/><CommandPalette open={cmd} setOpen={setCmd} nav={nav} go={go}/></div>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);
