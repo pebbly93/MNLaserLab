@@ -1869,7 +1869,7 @@ function Setup({ toast }) {
 
   
   const rawTreeWithAreas = (() => {
-    const base = list(rawTreeWithAreas).map(sec => ({
+    const base = list(tax.raw_tree).map(sec => ({
       ...sec,
       label: sec.label || sec.name || sec.section || sec.key || '',
       name: sec.name || sec.label || sec.section || sec.key || '',
