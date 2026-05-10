@@ -500,3 +500,40 @@ button {
   position: relative;
   z-index: 20;
 }
+
+/* fix v39.5.2 - suggerimenti input non sovrapposti */
+.field {
+  position: relative;
+}
+
+.suggestions {
+  position: relative !important;
+  z-index: 20;
+  margin-top: 8px;
+  width: 100%;
+  max-height: 220px;
+  overflow-y: auto;
+  border-radius: 14px;
+}
+
+.suggestions button {
+  width: 100%;
+  text-align: left;
+}
+
+.buy-grid .field,
+.form-grid .field {
+  overflow: visible;
+}
+
+.buy-grid .field:focus-within,
+.form-grid .field:focus-within {
+  z-index: 50;
+}
+
+.card,
+.card > div,
+.form-grid,
+.buy-grid {
+  overflow: visible;
+}
