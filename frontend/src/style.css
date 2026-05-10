@@ -996,3 +996,224 @@ button {
     flex-direction: column;
   }
 }
+
+
+/* v40 catalog workbench */
+.catalog-topbar {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.catalog-mode-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-mode-tabs button {
+  border: 1px solid rgba(148, 163, 184, .22);
+  background: rgba(255,255,255,.055);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.catalog-mode-tabs button.active {
+  background: rgba(34, 211, 238, .14);
+  border-color: rgba(34, 211, 238, .45);
+  color: var(--text);
+}
+
+.catalog-workbench {
+  display: grid;
+  grid-template-columns: 220px minmax(220px, .9fr) minmax(220px, .9fr) minmax(320px, 1.3fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.catalog-column {
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(255,255,255,.045);
+  border-radius: 24px;
+  padding: 14px;
+  min-height: 520px;
+}
+
+.catalog-column-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, .14);
+  margin-bottom: 12px;
+}
+
+.catalog-column-head > span {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(34, 211, 238, .14);
+  border: 1px solid rgba(34, 211, 238, .35);
+  font-weight: 900;
+  color: #67e8f9;
+}
+
+.catalog-column-head b {
+  display: block;
+}
+
+.catalog-column-head small {
+  display: block;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.catalog-list {
+  display: grid;
+  gap: 8px;
+}
+
+.catalog-list button {
+  text-align: left;
+  border: 1px solid rgba(148, 163, 184, .15);
+  background: rgba(255,255,255,.045);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 11px;
+  cursor: pointer;
+}
+
+.catalog-list button:hover {
+  border-color: rgba(34, 211, 238, .38);
+  background: rgba(34, 211, 238, .075);
+}
+
+.catalog-list button.selected {
+  border-color: rgba(34, 211, 238, .58);
+  background: rgba(34, 211, 238, .13);
+}
+
+.catalog-list button b,
+.catalog-list button small {
+  display: block;
+}
+
+.catalog-list button small {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.catalog-create-box,
+.catalog-selected-box,
+.catalog-config-card {
+  border: 1px solid rgba(148, 163, 184, .14);
+  background: rgba(2, 6, 23, .18);
+  border-radius: 18px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.catalog-create-box {
+  display: grid;
+  gap: 10px;
+}
+
+.catalog-selected-box span,
+.catalog-selected-box b {
+  display: block;
+}
+
+.catalog-selected-box span {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.catalog-selected-box b {
+  margin: 4px 0 10px;
+}
+
+.wide-action {
+  width: 100%;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.catalog-config-card {
+  display: grid;
+  gap: 10px;
+}
+
+.catalog-config-head b,
+.catalog-config-head small {
+  display: block;
+}
+
+.catalog-config-head small {
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.catalog-inline-add {
+  display: grid;
+  grid-template-columns: 1fr 42px;
+  gap: 8px;
+  align-items: end;
+}
+
+.catalog-inline-add button {
+  height: 42px;
+  display: grid;
+  place-items: center;
+}
+
+.pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.pill-list > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(148, 163, 184, .22);
+  background: rgba(255,255,255,.055);
+  border-radius: 999px;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.pill-list > span button {
+  border: 0;
+  background: rgba(239, 68, 68, .14);
+  color: #fecaca;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+@media (max-width: 1280px) {
+  .catalog-workbench {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 850px) {
+  .catalog-topbar,
+  .catalog-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-column {
+    min-height: auto;
+  }
+}

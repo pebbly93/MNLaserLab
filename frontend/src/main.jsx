@@ -994,15 +994,44 @@ function Setup({ toast }) {
   const { data: tax, refresh: refreshTax } = useApi('/taxonomy', { raw_tree: [], product_tree: [], supplier_matrix: [] });
   const { data: sug, refresh: refreshSug } = useApi('/suggestions', {});
 
-  const [tab, setTab] = useState('raw');
+  const [mode, setMode] = useState('raw');
   const [q, setQ] = useState('');
-  const [scopeFilter, setScopeFilter] = useState('all');
+  const [selectedArea, setSelectedArea] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedSubcategory, setSelectedSubcategory] = useState('');
 
-  const [raw, setRaw] = useState({ scope: 'materials', category: '', subcategory: '' });
-  const [prod, setProd] = useState({ category: '', subcategory: '', collection: '' });
-  const [fmt, setFmt] = useState({ category: '', value: '' });
-  const [thk, setThk] = useState({ category: '', value: '' });
-  const [typ, setTyp] = useState({ category: '', subcategory: '', value: '' });
+  const [rawDraft, setRawDraft] = useState({ category: '', subcategory: '' });
+  const [formatDraft, setFormatDraft] = useState('');
+  const [thicknessDraft, setThicknessDraft] = useState('');
+  const [typologyDraft, setTypologyDraft] = useState('');
+  const [productDraft, setProductDraft] = useState({ category: '', subcategory: '', collection: '' });
+
+  const rawAreas = list(tax.raw_tree);
+  const activeArea = rawAreas.find(a => a.scope === selectedArea || a.label === selectedArea) || rawAreas[0] || { scope: 'materials', label: 'Falegnameria', categories: [] };
+  const areaScope = activeArea.scope;
+  const areaLabel = activeArea.label;
+
+  useEffect(() => {
+    if (!selectedArea && rawAreas[0]) setSelectedArea(rawAreas[0].scope);
+  }, [tax.raw_tree]);
+
+  const activeCategories = list(activeArea.categories).filter(c => {
+    const text = [areaLabel, c.name, ...(list(c.subcategories))].join(' ').toLowerCase();
+    return !q || q.toLowerCase().split(/\s+/).every(part => text.includes(part));
+  });
+
+  const activeCategory = activeCategories.find(c => c.name === selectedCategory) || activeCategories[0] || null;
+  const activeSubcategories = list(activeCategory?.subcategories);
+  const activeSubcategory = selectedSubcategory || activeSubcategories[0] || '';
+
+  const productRows = Object.entries(sug.collections_by_product_path || {}).flatMap(([cat, subMap]) =>
+    Object.entries(subMap || {}).flatMap(([sub, cols]) =>
+      list(cols).map(col => ({ category: cat, subcategory: sub, collection: col }))
+    )
+  ).filter(r => {
+    const text = [r.category, r.subcategory, r.collection].join(' ').toLowerCase();
+    return !q || q.toLowerCase().split(/\s+/).every(part => text.includes(part));
+  });
 
   async function reloadCatalog() {
     await refreshTax();
@@ -1019,6 +1048,24 @@ function Setup({ toast }) {
     }
   }
 
+  async function addRawCategory() {
+    const payload = {
+      scope: areaScope,
+      category: rawDraft.category || selectedCategory,
+      subcategory: rawDraft.subcategory
+    };
+
+    if (!payload.category) {
+      toast('Inserisci una categoria', 'err');
+      return;
+    }
+
+    await save('/categories', payload, 'Categoria salvata');
+    setSelectedCategory(payload.category);
+    setSelectedSubcategory(payload.subcategory || '');
+    setRawDraft({ category: '', subcategory: '' });
+  }
+
   async function removeCategory(scope, category, subcategory = '') {
     const label = subcategory
       ? `Eliminare la sottocategoria "${subcategory}" da "${category}"?`
@@ -1030,37 +1077,55 @@ function Setup({ toast }) {
       const params = new URLSearchParams({ scope, category, subcategory });
       await del('/categories?' + params.toString());
       toast(subcategory ? 'Sottocategoria eliminata' : 'Categoria eliminata');
+
+      if (!subcategory && selectedCategory === category) {
+        setSelectedCategory('');
+        setSelectedSubcategory('');
+      }
+
+      if (subcategory && selectedSubcategory === subcategory) {
+        setSelectedSubcategory('');
+      }
+
       await reloadCatalog();
     } catch (e) {
       toast(e.message, 'err');
     }
   }
 
-  async function removeProductLink(r) {
-    if (!confirm(`Eliminare il collegamento "${r.category} → ${r.subcategory} → ${r.collection}"?`)) return;
-    try {
-      const params = new URLSearchParams({ category: r.category, subcategory: r.subcategory, collection: r.collection });
-      await del('/product-links?' + params.toString());
-      toast('Collegamento prodotto eliminato');
-      await reloadCatalog();
-    } catch (e) {
-      toast(e.message, 'err');
+  async function addFormat() {
+    const category = selectedCategory;
+    if (!category || !formatDraft) {
+      toast('Seleziona una categoria e inserisci un formato', 'err');
+      return;
     }
+
+    await save('/catalog/formats', { category, value: formatDraft }, 'Formato salvato');
+    setFormatDraft('');
   }
 
-  async function saveFormat() {
-    await save('/catalog/formats', fmt, 'Formato salvato');
-    setFmt(v => ({ ...v, value: '' }));
+  async function addThickness() {
+    const category = selectedCategory;
+    if (!category || !thicknessDraft) {
+      toast('Seleziona una categoria e inserisci uno spessore', 'err');
+      return;
+    }
+
+    await save('/catalog/thicknesses', { category, value: thicknessDraft }, 'Spessore salvato');
+    setThicknessDraft('');
   }
 
-  async function saveThickness() {
-    await save('/catalog/thicknesses', thk, 'Spessore salvato');
-    setThk(v => ({ ...v, value: '' }));
-  }
+  async function addTypology() {
+    const category = selectedCategory;
+    const subcategory = activeSubcategory;
 
-  async function saveTypology() {
-    await save('/catalog/typologies', typ, 'Tipologia salvata');
-    setTyp(v => ({ ...v, value: '' }));
+    if (!category || !subcategory || !typologyDraft) {
+      toast('Seleziona categoria/sottocategoria e inserisci una tipologia', 'err');
+      return;
+    }
+
+    await save('/catalog/typologies', { category, subcategory, value: typologyDraft }, 'Tipologia salvata');
+    setTypologyDraft('');
   }
 
   async function removeFormat(category, value) {
@@ -1099,195 +1164,221 @@ function Setup({ toast }) {
     }
   }
 
-  const rawRowsAll = list(tax.raw_tree).flatMap(sec =>
-    list(sec.categories).flatMap(c =>
-      list(c.subcategories).length
-        ? list(c.subcategories).map(sub => ({
-            scope: sec.scope,
-            area: sec.label,
-            category: c.name,
-            subcategory: sub,
-            suppliers: c.suppliers
-          }))
-        : [{
-            scope: sec.scope,
-            area: sec.label,
-            category: c.name,
-            subcategory: '',
-            suppliers: c.suppliers
-          }]
-    )
-  );
+  async function addProductLink() {
+    if (!productDraft.category || !productDraft.subcategory || !productDraft.collection) {
+      toast('Categoria, sottocategoria e collezione prodotto sono richieste', 'err');
+      return;
+    }
 
-  const prodRowsAll = Object.entries(sug.collections_by_product_path || {}).flatMap(([cat, subMap]) =>
-    Object.entries(subMap || {}).flatMap(([sub, cols]) =>
-      list(cols).map(col => ({ category: cat, subcategory: sub, collection: col }))
-    )
-  );
+    await save('/product-links', productDraft, 'Collezione prodotto salvata');
+    setProductDraft({ category: '', subcategory: '', collection: '' });
+  }
 
-  const formatRowsAll = Object.entries(sug.formats_by_category || {}).flatMap(([category, values]) =>
-    list(values).map(value => ({ category, value }))
-  );
+  async function removeProductLink(r) {
+    if (!confirm(`Eliminare il collegamento "${r.category} → ${r.subcategory} → ${r.collection}"?`)) return;
 
-  const thicknessRowsAll = Object.entries(sug.thicknesses_by_category || {}).flatMap(([category, values]) =>
-    list(values).map(value => ({ category, value }))
-  );
+    try {
+      const params = new URLSearchParams({
+        category: r.category,
+        subcategory: r.subcategory,
+        collection: r.collection,
+      });
+      await del('/product-links?' + params.toString());
+      toast('Collegamento prodotto eliminato');
+      await reloadCatalog();
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
 
-  const typologyRowsAll = Object.entries(sug.typologies_by_category_subcategory || {}).flatMap(([category, subMap]) =>
-    Object.entries(subMap || {}).flatMap(([subcategory, values]) =>
-      list(values).map(value => ({ category, subcategory, value }))
-    )
-  );
+  const categoryFormats = list(pick(sug, ['formats_by_category', selectedCategory], []));
+  const categoryThicknesses = list(pick(sug, ['thicknesses_by_category', selectedCategory], []));
+  const subTypologies = list(pick(sug, ['typologies_by_category_subcategory', selectedCategory, activeSubcategory], []));
 
-  const allRawCategories = unique([...list(sug.raw_categories), ...rawRowsAll.map(r => r.category)]);
-  const areaChoices = list(tax.raw_tree).map(x => ({ scope: x.scope, label: x.label }));
-
-  const textMatch = row => {
-    const t = Object.values(row || {}).join(' ').toLowerCase();
-    return !q || q.toLowerCase().split(/\s+/).every(part => t.includes(part));
+  const areaStats = {
+    categories: list(activeArea.categories).length,
+    subcategories: list(activeArea.categories).reduce((a, c) => a + list(c.subcategories).length, 0),
   };
 
-  const rawRows = rawRowsAll
-    .filter(r => scopeFilter === 'all' || r.scope === scopeFilter || r.area === scopeFilter)
-    .filter(textMatch);
-
-  const prodRows = prodRowsAll.filter(textMatch);
-  const formatRows = formatRowsAll.filter(textMatch);
-  const thicknessRows = thicknessRowsAll.filter(textMatch);
-  const typologyRows = typologyRowsAll.filter(textMatch);
-
-  const typSubcategories = typ.category
-    ? unique(rawRowsAll.filter(r => r.category === typ.category).map(r => r.subcategory).filter(Boolean))
-    : [];
-
-  const formCategoryOptions = scopeFilter === 'all'
-    ? allRawCategories
-    : unique(rawRowsAll.filter(r => r.scope === scopeFilter || r.area === scopeFilter).map(r => r.category));
-
   return <>
-    <PageTitle title="Catalogo" desc="Gestisci categorie, formati, spessori e tipologie senza mischiare aree diverse come Falegnameria e Illuminazione." />
+    <PageTitle title="Catalogo" desc="Gestione guidata: scegli l’area, poi categoria e sottocategoria. Formati, spessori e tipologie restano collegati al contesto corretto." />
 
-    <Card title="Centro catalogo" icon={Settings2} sub="Scegli cosa vuoi configurare, filtra per area e cerca velocemente ciò che vuoi modificare.">
-      <div className="catalog-toolbar">
-        <div className="catalog-tabs">
-          <button className={tab === 'raw' ? 'active' : ''} onClick={() => setTab('raw')}>Materiali</button>
-          <button className={tab === 'formats' ? 'active' : ''} onClick={() => setTab('formats')}>Formati</button>
-          <button className={tab === 'thicknesses' ? 'active' : ''} onClick={() => setTab('thicknesses')}>Spessori</button>
-          <button className={tab === 'typologies' ? 'active' : ''} onClick={() => setTab('typologies')}>Tipologie</button>
-          <button className={tab === 'products' ? 'active' : ''} onClick={() => setTab('products')}>Prodotti</button>
+    <Card title="Gestione catalogo" icon={Settings2} sub="Struttura più ordinata per evitare valori fuori contesto, come 12V dentro Falegnameria/Legname.">
+      <div className="catalog-topbar">
+        <div className="catalog-mode-tabs">
+          <button className={mode === 'raw' ? 'active' : ''} onClick={() => setMode('raw')}>Materiali e componenti</button>
+          <button className={mode === 'products' ? 'active' : ''} onClick={() => setMode('products')}>Prodotti finiti</button>
         </div>
-
-        <div className="catalog-filters">
-          <select value={scopeFilter} onChange={e => setScopeFilter(e.target.value)}>
-            <option value="all">Tutte le aree</option>
-            {areaChoices.map(a => <option key={a.scope} value={a.scope}>{a.label}</option>)}
-          </select>
-          <SearchBox value={q} onChange={setQ} placeholder="Cerca categoria, sottocategoria, formato..." />
-        </div>
+        <SearchBox value={q} onChange={setQ} placeholder="Cerca nel catalogo..." />
       </div>
     </Card>
 
-    {tab === 'raw' && <>
-      <Card title="Aggiungi categoria materiale" icon={Truck} sub="Esempio: Falegnameria → Legname → Betulla. Illuminazione resta separata da Legname.">
-        <div className="catalog-editor-grid">
-          <Select label="Area" value={raw.scope} onChange={e=>setRaw({...raw,scope:e.target.value,category:'',subcategory:''})}>
-            {areaChoices.map(a => <option key={a.scope} value={a.scope}>{a.label}</option>)}
-          </Select>
-          <SmartInput label="Categoria" options={rawCatsStrict ? rawCatsStrict(sug, raw.scope) : rawCats(sug, raw.scope)} value={raw.category} onChange={e=>setRaw({...raw,category:e.target.value,subcategory:''})}/>
-          <SmartInput label="Sottocategoria" options={rawSubsStrict ? rawSubsStrict(sug, raw.scope, raw.category) : rawSubs(sug, raw.scope, raw.category)} value={raw.subcategory} onChange={e=>setRaw({...raw,subcategory:e.target.value})}/>
-          <button className="primary" onClick={() => save('/categories', raw, 'Categoria materiale salvata')}><Plus /> Salva</button>
+    {mode === 'raw' && <div className="catalog-workbench">
+      <section className="catalog-column catalog-areas">
+        <div className="catalog-column-head">
+          <span>1</span>
+          <div>
+            <b>Aree</b>
+            <small>Ambito del materiale</small>
+          </div>
         </div>
-      </Card>
 
-      <Card title="Categorie materiali" icon={Layers3} sub={`${rawRows.length} elementi visualizzati`}>
-        <DataTable rows={rawRows} empty="Nessuna categoria materiale" columns={[
-          {key:'area',label:'Area'},
-          {key:'category',label:'Categoria'},
-          {key:'subcategory',label:'Sottocategoria',render:r=>r.subcategory || '—'},
-          {key:'suppliers',label:'Fornitori',render:r=>r.suppliers || 0},
-          {key:'act',label:'Azioni',render:r=><div className="table-actions">
-            {r.subcategory && <button className="ghost danger" onClick={()=>removeCategory(r.scope, r.category, r.subcategory)}>Elimina sottocategoria</button>}
-            <button className="ghost danger" onClick={()=>removeCategory(r.scope, r.category, '')}>Elimina categoria</button>
-          </div>}
-        ]} />
-      </Card>
-    </>}
-
-    {tab === 'formats' && <>
-      <Card title="Aggiungi formato" icon={Layers3} sub="Associa i formati solo alla categoria corretta. Esempio: Legname → 20x20, 40x40.">
-        <div className="catalog-editor-grid">
-          <SmartInput label="Categoria" options={formCategoryOptions} value={fmt.category} onChange={e=>setFmt({...fmt,category:e.target.value})}/>
-          <SmartInput label="Formato / tipo" options={formats(sug, fmt.category)} value={fmt.value} onChange={e=>setFmt({...fmt,value:e.target.value})} placeholder="Es. 20x20, 40x40, Rotolo"/>
-          <button className="primary" onClick={saveFormat}><Plus /> Aggiungi</button>
+        <div className="catalog-list">
+          {rawAreas.map(area => <button
+            key={area.scope}
+            className={(area.scope === areaScope || area.label === areaLabel) ? 'selected' : ''}
+            onClick={() => {
+              setSelectedArea(area.scope);
+              setSelectedCategory('');
+              setSelectedSubcategory('');
+              setRawDraft({ category: '', subcategory: '' });
+            }}
+          >
+            <b>{area.label}</b>
+            <small>{list(area.categories).length} categorie</small>
+          </button>)}
         </div>
-      </Card>
+      </section>
 
-      <Card title="Formati configurati" icon={Layers3} sub={`${formatRows.length} elementi visualizzati`}>
-        <DataTable rows={formatRows} empty="Nessun formato configurato" columns={[
-          {key:'category',label:'Categoria'},
-          {key:'value',label:'Formato'},
-          {key:'act',label:'Azioni',render:r=><button className="ghost danger" onClick={()=>removeFormat(r.category, r.value)}><Trash2 /> Elimina</button>}
-        ]} />
-      </Card>
-    </>}
-
-    {tab === 'thicknesses' && <>
-      <Card title="Aggiungi spessore" icon={Layers3} sub="Associa gli spessori alle categorie corrette. Esempio: Legname → 2 mm, 4 mm, 10 mm.">
-        <div className="catalog-editor-grid">
-          <SmartInput label="Categoria" options={formCategoryOptions} value={thk.category} onChange={e=>setThk({...thk,category:e.target.value})}/>
-          <SmartInput label="Spessore" options={thicknesses(sug, thk.category)} value={thk.value} onChange={e=>setThk({...thk,value:e.target.value})} placeholder="Es. 2 mm, 4 mm, 10 mm"/>
-          <button className="primary" onClick={saveThickness}><Plus /> Aggiungi</button>
+      <section className="catalog-column catalog-categories">
+        <div className="catalog-column-head">
+          <span>2</span>
+          <div>
+            <b>Categorie</b>
+            <small>{areaLabel} · {areaStats.categories} categorie</small>
+          </div>
         </div>
-      </Card>
 
-      <Card title="Spessori configurati" icon={Layers3} sub={`${thicknessRows.length} elementi visualizzati`}>
-        <DataTable rows={thicknessRows} empty="Nessuno spessore configurato" columns={[
-          {key:'category',label:'Categoria'},
-          {key:'value',label:'Spessore'},
-          {key:'act',label:'Azioni',render:r=><button className="ghost danger" onClick={()=>removeThickness(r.category, r.value)}><Trash2 /> Elimina</button>}
-        ]} />
-      </Card>
-    </>}
-
-    {tab === 'typologies' && <>
-      <Card title="Aggiungi tipologia" icon={Settings2} sub="Esempio: Illuminazione → Alimentatori → 12V → Da presa.">
-        <div className="catalog-editor-grid">
-          <SmartInput label="Categoria" options={formCategoryOptions} value={typ.category} onChange={e=>setTyp({...typ,category:e.target.value,subcategory:'',value:''})}/>
-          <SmartInput label="Sottocategoria" options={typSubcategories} value={typ.subcategory} onChange={e=>setTyp({...typ,subcategory:e.target.value,value:''})}/>
-          <SmartInput label="Tipologia" options={typologies(sug, typ.category, typ.subcategory)} value={typ.value} onChange={e=>setTyp({...typ,value:e.target.value})} placeholder="Es. Da presa, Da incasso, Luce calda"/>
-          <button className="primary" onClick={saveTypology}><Plus /> Aggiungi</button>
+        <div className="catalog-create-box">
+          <SmartInput label="Nuova categoria" options={rawCatsStrict ? rawCatsStrict(sug, areaScope) : rawCats(sug, areaScope)} value={rawDraft.category} onChange={e => setRawDraft({ ...rawDraft, category: e.target.value })} placeholder="Es. Legname, Acrilico, Alimentatori" />
+          <SmartInput label="Sottocategoria opzionale" options={rawDraft.category ? (rawSubsStrict ? rawSubsStrict(sug, areaScope, rawDraft.category) : rawSubs(sug, areaScope, rawDraft.category)) : []} value={rawDraft.subcategory} onChange={e => setRawDraft({ ...rawDraft, subcategory: e.target.value })} placeholder="Es. Betulla, Pioppo, 12V" />
+          <button className="primary" onClick={addRawCategory}><Plus /> Aggiungi</button>
         </div>
-      </Card>
 
-      <Card title="Tipologie configurate" icon={Settings2} sub={`${typologyRows.length} elementi visualizzati`}>
-        <DataTable rows={typologyRows} empty="Nessuna tipologia configurata" columns={[
-          {key:'category',label:'Categoria'},
-          {key:'subcategory',label:'Sottocategoria'},
-          {key:'value',label:'Tipologia'},
-          {key:'act',label:'Azioni',render:r=><button className="ghost danger" onClick={()=>removeTypology(r.category, r.subcategory, r.value)}><Trash2 /> Elimina</button>}
-        ]} />
-      </Card>
-    </>}
+        <div className="catalog-list">
+          {activeCategories.map(cat => <button
+            key={cat.name}
+            className={selectedCategory === cat.name || (!selectedCategory && activeCategory?.name === cat.name) ? 'selected' : ''}
+            onClick={() => {
+              setSelectedCategory(cat.name);
+              setSelectedSubcategory('');
+              setRawDraft({ category: cat.name, subcategory: '' });
+            }}
+          >
+            <b>{cat.name}</b>
+            <small>{list(cat.subcategories).length} sottocategorie · {cat.suppliers || 0} fornitori</small>
+          </button>)}
+          {!activeCategories.length && <Empty text="Nessuna categoria trovata" />}
+        </div>
+      </section>
 
-    {tab === 'products' && <>
+      <section className="catalog-column catalog-subcategories">
+        <div className="catalog-column-head">
+          <span>3</span>
+          <div>
+            <b>Sottocategorie</b>
+            <small>{activeCategory?.name || 'Seleziona categoria'}</small>
+          </div>
+        </div>
+
+        <div className="catalog-selected-box">
+          <span>Categoria selezionata</span>
+          <b>{selectedCategory || activeCategory?.name || '—'}</b>
+          {(selectedCategory || activeCategory?.name) && <button className="ghost danger" onClick={() => removeCategory(areaScope, selectedCategory || activeCategory?.name, '')}>Elimina categoria</button>}
+        </div>
+
+        <div className="catalog-list">
+          {activeSubcategories.map(sub => <button
+            key={sub}
+            className={activeSubcategory === sub ? 'selected' : ''}
+            onClick={() => setSelectedSubcategory(sub)}
+          >
+            <b>{sub}</b>
+            <small>{selectedCategory || activeCategory?.name}</small>
+          </button>)}
+          {!activeSubcategories.length && <Empty text="Nessuna sottocategoria" />}
+        </div>
+
+        {activeSubcategory && <button className="ghost danger wide-action" onClick={() => removeCategory(areaScope, selectedCategory || activeCategory?.name, activeSubcategory)}>
+          <Trash2 /> Elimina sottocategoria selezionata
+        </button>}
+      </section>
+
+      <section className="catalog-column catalog-linked">
+        <div className="catalog-column-head">
+          <span>4</span>
+          <div>
+            <b>Configurazioni collegate</b>
+            <small>{selectedCategory || activeCategory?.name || 'Nessuna categoria'}</small>
+          </div>
+        </div>
+
+        <div className="catalog-config-card">
+          <div className="catalog-config-head">
+            <b>Formati</b>
+            <small>Validi per la categoria</small>
+          </div>
+          <div className="catalog-inline-add">
+            <SmartInput label="Aggiungi formato" options={formats(sug, selectedCategory || activeCategory?.name)} value={formatDraft} onChange={e => setFormatDraft(e.target.value)} placeholder="20x20, 40x40, Rotolo" />
+            <button onClick={addFormat}><Plus /></button>
+          </div>
+          <div className="pill-list">
+            {categoryFormats.map(v => <span key={v}>{v}<button onClick={() => removeFormat(selectedCategory || activeCategory?.name, v)}>×</button></span>)}
+            {!categoryFormats.length && <small className="muted-cell">Nessun formato</small>}
+          </div>
+        </div>
+
+        <div className="catalog-config-card">
+          <div className="catalog-config-head">
+            <b>Spessori</b>
+            <small>Validi per la categoria</small>
+          </div>
+          <div className="catalog-inline-add">
+            <SmartInput label="Aggiungi spessore" options={thicknesses(sug, selectedCategory || activeCategory?.name)} value={thicknessDraft} onChange={e => setThicknessDraft(e.target.value)} placeholder="2 mm, 4 mm, 10 mm" />
+            <button onClick={addThickness}><Plus /></button>
+          </div>
+          <div className="pill-list">
+            {categoryThicknesses.map(v => <span key={v}>{v}<button onClick={() => removeThickness(selectedCategory || activeCategory?.name, v)}>×</button></span>)}
+            {!categoryThicknesses.length && <small className="muted-cell">Nessuno spessore</small>}
+          </div>
+        </div>
+
+        <div className="catalog-config-card">
+          <div className="catalog-config-head">
+            <b>Tipologie</b>
+            <small>Valide per la sottocategoria</small>
+          </div>
+          <div className="catalog-inline-add">
+            <SmartInput label="Aggiungi tipologia" options={typologies(sug, selectedCategory || activeCategory?.name, activeSubcategory)} value={typologyDraft} onChange={e => setTypologyDraft(e.target.value)} placeholder="Da presa, Luce calda..." />
+            <button onClick={addTypology}><Plus /></button>
+          </div>
+          <div className="pill-list">
+            {subTypologies.map(v => <span key={v}>{v}<button onClick={() => removeTypology(selectedCategory || activeCategory?.name, activeSubcategory, v)}>×</button></span>)}
+            {!subTypologies.length && <small className="muted-cell">Nessuna tipologia</small>}
+          </div>
+        </div>
+      </section>
+    </div>}
+
+    {mode === 'products' && <div className="split-main">
       <Card title="Aggiungi collegamento prodotto" icon={Tags} sub="Esempio: Orologi → Anime → One Piece.">
         <div className="catalog-editor-grid">
-          <SmartInput label="Categoria prodotto" options={sug.product_categories} value={prod.category} onChange={e=>setProd({...prod,category:e.target.value,subcategory:'',collection:''})}/>
-          <SmartInput label="Sottocategoria prodotto" options={prodSubs(sug, prod.category)} value={prod.subcategory} onChange={e=>setProd({...prod,subcategory:e.target.value,collection:''})}/>
-          <SmartInput label="Collezione / tema" options={collections(sug, prod.category, prod.subcategory)} value={prod.collection} onChange={e=>setProd({...prod,collection:e.target.value})}/>
-          <button className="primary" onClick={() => save('/product-links', prod, 'Collezione prodotto salvata')}><Plus /> Salva</button>
+          <SmartInput label="Categoria prodotto" options={sug.product_categories} value={productDraft.category} onChange={e=>setProductDraft({...productDraft,category:e.target.value,subcategory:'',collection:''})}/>
+          <SmartInput label="Sottocategoria prodotto" options={prodSubs(sug, productDraft.category)} value={productDraft.subcategory} onChange={e=>setProductDraft({...productDraft,subcategory:e.target.value,collection:''})}/>
+          <SmartInput label="Collezione / tema" options={collections(sug, productDraft.category, productDraft.subcategory)} value={productDraft.collection} onChange={e=>setProductDraft({...productDraft,collection:e.target.value})}/>
+          <button className="primary" onClick={addProductLink}><Plus /> Salva</button>
         </div>
       </Card>
 
-      <Card title="Categorie prodotti" icon={Factory} sub={`${prodRows.length} elementi visualizzati`}>
-        <DataTable rows={prodRows} empty="Nessuna categoria prodotto" columns={[
+      <Card title="Categorie prodotti finiti" icon={Factory} sub={`${productRows.length} collegamenti visualizzati`}>
+        <DataTable rows={productRows} empty="Nessuna categoria prodotto" columns={[
           {key:'category',label:'Categoria'},
           {key:'subcategory',label:'Sottocategoria'},
           {key:'collection',label:'Collezione'},
           {key:'act',label:'Azioni',render:r=><button className="ghost danger" onClick={()=>removeProductLink(r)}><Trash2 /> Elimina</button>}
         ]} />
       </Card>
-    </>}
+    </div>}
   </>;
 }
 
