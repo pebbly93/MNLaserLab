@@ -743,3 +743,23 @@ def quote_internal_pdf_api(quote_id: str):
         return HTMLResponse(quote_internal_html(load_db(), quote_id))
     except ValueError as exc:
         raise HTTPException(404, str(exc))
+
+
+@app.get("/api/quote-pdf/customer", response_class=HTMLResponse)
+def quote_customer_pdf_query_api(id: str):
+    try:
+        db = load_db()
+        quote = get_quote_flexible(db, id)
+        return HTMLResponse(quote_customer_html(db, quote.get("id", id)))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@app.get("/api/quote-pdf/internal", response_class=HTMLResponse)
+def quote_internal_pdf_query_api(id: str):
+    try:
+        db = load_db()
+        quote = get_quote_flexible(db, id)
+        return HTMLResponse(quote_internal_html(db, quote.get("id", id)))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))

@@ -2311,3 +2311,32 @@ def quote_internal_html(db, quote_id):
   </main>
 </body>
 </html>"""
+
+
+# ---------------------------------------------------------------------------
+# v39.8.2 - Ricerca robusta preventivi per PDF
+# ---------------------------------------------------------------------------
+
+def get_quote_flexible(db, quote_id):
+    quotes = db.get("quotes", []) or []
+
+    for q in quotes:
+        if str(q.get("id", "")) == str(quote_id):
+            return q
+
+    # fallback: alcune versioni vecchie possono avere id salvati come indice/stringa
+    try:
+        idx = int(str(quote_id))
+        if 0 <= idx < len(quotes):
+            return quotes[idx]
+    except Exception:
+        pass
+
+    # fallback: se arriva un id parziale o codificato diversamente
+    qid = str(quote_id or "").strip()
+    for q in quotes:
+        current = str(q.get("id", "")).strip()
+        if current and (current.endswith(qid) or qid.endswith(current)):
+            return q
+
+    raise ValueError("Preventivo non trovato")

@@ -477,6 +477,60 @@ function setupAutoUpdater() {
 
 ipcMain.handle("app-version", () => app.getVersion());
 
+
+ipcMain.handle("save-quote-pdf", async (_event, payload) => {
+  const url = payload && payload.url;
+  const defaultName = payload && payload.defaultName ? payload.defaultName : "preventivo.pdf";
+
+  if (!url) {
+    return { ok: false, error: "URL PDF mancante" };
+  }
+
+  try {
+    const targetWindow = mainWindow || BrowserWindow.getFocusedWindow();
+
+    const result = await dialog.showSaveDialog(targetWindow, {
+      title: "Salva preventivo PDF",
+      defaultPath: defaultName,
+      filters: [
+        { name: "PDF", extensions: ["pdf"] }
+      ]
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { ok: false, canceled: true };
+    }
+
+    const pdfWindow = new BrowserWindow({
+      show: false,
+      width: 1240,
+      height: 1754,
+      webPreferences: {
+        sandbox: false,
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    await pdfWindow.loadURL(url);
+
+    const pdfData = await pdfWindow.webContents.printToPDF({
+      printBackground: true,
+      landscape: false,
+      marginsType: 0,
+      pageSize: "A4"
+    });
+
+    fs.writeFileSync(result.filePath, pdfData);
+    pdfWindow.close();
+
+    return { ok: true, path: result.filePath };
+  } catch (err) {
+    return { ok: false, error: err && err.message ? err.message : String(err) };
+  }
+});
+
+
 ipcMain.handle("check-for-updates", async () => {
   await checkForUpdatesManual();
   return { ok: true };

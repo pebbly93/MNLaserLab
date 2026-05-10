@@ -709,7 +709,7 @@ function Quote({ toast }) {
     }
   }
 
-  function openQuotePdf(q, type = 'customer') {
+  async function openQuotePdf(q, type = 'customer') {
     if (!q?.id) {
       toast('Salva prima il preventivo', 'err');
       return;
@@ -722,9 +722,34 @@ function Quote({ toast }) {
           ? 'http://127.0.0.1:8000'
           : window.location.origin;
 
-    const url = `${backendBase}/api/quotes/${encodeURIComponent(q.id)}/pdf/${type}`;
+    const url = `${backendBase}/api/quote-pdf/${type}?id=${encodeURIComponent(q.id)}`;
+    const cleanName = String(q.name || 'preventivo')
+      .replace(/[^\w\d\-_\s]/g, '')
+      .trim()
+      .replace(/\s+/g, '_');
 
-    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+    const defaultName = `${type === 'customer' ? 'Preventivo_cliente' : 'Preventivo_interno'}_${cleanName || q.id}.pdf`;
+
+    const api = window.mnLaserLab || window.mnLaserLabPdf;
+
+    if (api?.saveQuotePdf) {
+      const result = await api.saveQuotePdf({ url, defaultName });
+
+      if (result?.ok) {
+        toast(`PDF salvato: ${result.path}`);
+        return;
+      }
+
+      if (result?.canceled) {
+        toast('Salvataggio annullato');
+        return;
+      }
+
+      toast(result?.error || 'Salvataggio PDF non riuscito', 'err');
+      return;
+    }
+
+    const popup = window.open(url, '_blank');
 
     if (!popup) {
       window.location.href = url;
