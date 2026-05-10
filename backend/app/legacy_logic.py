@@ -2108,7 +2108,7 @@ def quote_customer_html(db, quote_id):
           </tr>
         """
 
-    return f"""<!doctype html>
+    html = f"""<!doctype html>
 <html lang="it">
 <head>
   <meta charset="utf-8">
@@ -2308,6 +2308,7 @@ def quote_customer_html(db, quote_id):
   </main>
 </body>
 </html>"""
+    return apply_pdf_brand_to_html(db, html, 'customer')
 
 
 def quote_internal_html(db, quote_id):
@@ -2346,7 +2347,7 @@ def quote_internal_html(db, quote_id):
     discounted = result.get("discounted", quote.get("discounted", 0))
     premium = result.get("premium", quote.get("premium", 0))
 
-    return f"""<!doctype html>
+    html = f"""<!doctype html>
 <html lang="it">
 <head>
   <meta charset="utf-8">
@@ -2496,6 +2497,7 @@ def quote_internal_html(db, quote_id):
   </main>
 </body>
 </html>"""
+    return apply_pdf_brand_to_html(db, html, 'internal')
 
 
 # ---------------------------------------------------------------------------
@@ -3074,3 +3076,129 @@ def _pdf_brand_css(db):
       }}
     </style>
     """
+
+
+# ---------------------------------------------------------------------------
+# v40.7.2b - Applicazione sicura modello PDF senza doppia intestazione
+# ---------------------------------------------------------------------------
+
+def apply_pdf_brand_to_html(db, html, kind="customer"):
+    settings = get_pdf_settings(db)
+
+    company = settings.get("company_name", "MN Laser Lab") or "MN Laser Lab"
+    author = settings.get("author", "") or ""
+    email = settings.get("email", "") or ""
+    phone = settings.get("phone", "") or ""
+    address = settings.get("address", "") or ""
+    website = settings.get("website", "") or ""
+    vat = settings.get("vat", "") or ""
+    color = settings.get("primary_color", "#058482") or "#058482"
+    footer = settings.get("footer", "") or ""
+    terms = settings.get("terms", "") or ""
+    intro = settings.get("intro_text", "") or ""
+    logo = settings.get("logo_data_url", "") or ""
+
+    contact_bits = [x for x in [author, email, phone, address, website, vat] if str(x or "").strip()]
+    contact_line = " · ".join(contact_bits)
+
+    # Rimuove residui di eventuali iniezioni vecchie.
+    html = html.replace("{_pdf_brand_css(db)}", "")
+    html = html.replace("{_pdf_brand_block(db)}", "")
+
+    # Colore brand.
+    html = html.replace("#058482", color)
+
+    # Nome azienda.
+    html = html.replace("MN Laser Lab", company)
+
+    # Sostituzioni robuste delle righe contatto vecchie/hardcoded.
+    old_contact_variants = [
+        "Filippo Lolli - filippololli1@gmail.com",
+        "Filippo Lolli · filippololli1@gmail.com",
+        "Filippo Lolli - filippololli@gmail.com",
+        "Filippo Lolli · filippololli@gmail.com",
+        "filippololli@gmail.com",
+        "filippololli1@gmail.com",
+    ]
+
+    for old in old_contact_variants:
+        if old in html:
+            html = html.replace(old, contact_line or old)
+
+    # Sostituisce payoff/descrizione storica, se presente.
+    old_subtitle_variants = [
+        "Creazioni artigianali in legno · Taglio e incisione laser",
+        "Creazioni artigianali in legno - Taglio e incisione laser",
+        "Creazioni artigianali in legno e taglio laser",
+    ]
+
+    business_subtitle = settings.get("business_subtitle", "") or settings.get("footer", "") or ""
+    if business_subtitle:
+        for old in old_subtitle_variants:
+            html = html.replace(old, business_subtitle)
+
+    # Testo introduttivo, condizioni e footer.
+    if intro:
+        html = html.replace(
+            "Grazie per averci contattato. Di seguito trovi il riepilogo del preventivo richiesto.",
+            intro
+        )
+
+    if terms:
+        html = html.replace(
+            "Il preventivo è valido salvo disponibilità materiali e conferma finale della lavorazione.",
+            terms
+        )
+
+    if footer:
+        html = html.replace("Preventivo generato con MN Laser Lab Manager.", footer)
+
+    # Se non siamo riusciti a sostituire una riga contatto, la aggiungiamo sotto il nome azienda.
+    if contact_line and contact_line not in html:
+        html = html.replace(
+            f"<h1>{company}</h1>",
+            f"<h1>{company}</h1><p class='pdf-dynamic-contact'>{contact_line}</p>",
+            1
+        )
+
+    # Logo dentro la testata esistente, non come seconda intestazione.
+    if logo and "pdf-brand-logo-inline" not in html:
+        logo_html = f"<img class='pdf-brand-logo-inline' src='{logo}' alt='Logo' />"
+        html = html.replace(
+            f"<h1>{company}</h1>",
+            f"<div class='pdf-brand-title-row'>{logo_html}<h1>{company}</h1></div>",
+            1
+        )
+
+    extra_css = f"""
+    <style>
+      :root {{ --brand: {color}; }}
+      .pdf-brand-title-row {{
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }}
+      .pdf-brand-logo-inline {{
+        max-width: 76px;
+        max-height: 56px;
+        object-fit: contain;
+        display: block;
+      }}
+      .pdf-dynamic-contact {{
+        margin: 4px 0;
+        color: #475569;
+        font-size: 13px;
+      }}
+      @media print {{
+        .print-button, .print-actions, button {{
+          display: none !important;
+        }}
+      }}
+    </style>
+    """
+
+    if "</head>" in html:
+        html = html.replace("</head>", extra_css + "\n</head>", 1)
+
+    return html
+
