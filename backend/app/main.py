@@ -321,38 +321,70 @@ def add_preset(payload: Payload):
 def ensure_custom_areas_in_taxonomy(db, result):
     """
     Garantisce che /api/taxonomy includa anche le aree catalogo vuote.
-    Serve per farle comparire nella colonna 'Aree' prima di creare categorie figlie.
+    Filtra chiavi tecniche come materials/components/products.
     """
     if not isinstance(result, dict):
         return result
 
+    technical = {
+        "materials",
+        "components",
+        "products",
+        "sales",
+        "quotes",
+        "customers",
+        "suppliers",
+        "categories",
+        "formats",
+        "thicknesses",
+        "typologies",
+    }
+
     raw_tree = result.setdefault("raw_tree", [])
 
+    cleaned_tree = []
     seen = set()
+
     for sec in raw_tree:
         if not isinstance(sec, dict):
             continue
+
         label = str(sec.get("label") or sec.get("name") or sec.get("section") or sec.get("key") or "").strip()
-        if label:
-            seen.add(label)
+        if not label:
+            continue
+
+        if label.lower() in technical:
+            continue
+
+        if label in seen:
+            continue
+
+        sec["label"] = label
+        sec["name"] = sec.get("name") or label
+        sec["categories"] = sec.get("categories") or []
+        cleaned_tree.append(sec)
+        seen.add(label)
 
     areas = []
     for a in db.get("catalog_areas", []) or []:
         a = str(a or "").strip()
-        if a and a not in areas:
+        if not a or a.lower() in technical:
+            continue
+        if a not in areas:
             areas.append(a)
 
-    # Integra anche eventuali chiavi già presenti in categories.
     for a in (db.get("categories", {}) or {}).keys():
         a = str(a or "").strip()
-        if a and a not in areas:
+        if not a or a.lower() in technical:
+            continue
+        if a not in areas:
             areas.append(a)
 
     for area in areas:
         if area in seen:
             continue
 
-        raw_tree.append({
+        cleaned_tree.append({
             "key": area,
             "label": area,
             "name": area,
@@ -361,7 +393,9 @@ def ensure_custom_areas_in_taxonomy(db, result):
         })
         seen.add(area)
 
+    result["raw_tree"] = cleaned_tree
     return result
+
 
 @app.get("/api/taxonomy")
 def taxonomy():

@@ -3769,52 +3769,79 @@ def default_catalog_areas():
 def get_catalog_areas(db):
     areas = db.setdefault("catalog_areas", [])
 
-    # Migrazione morbida: integra le aree standard e quelle già ricavate dai dati.
+    # Aree standard + aree utente. Non importiamo chiavi tecniche tipo materials/components/products.
     merged = []
-    for x in default_catalog_areas() + list(areas) + list(raw_section_choices(db)):
+    for x in default_catalog_areas() + list(areas):
         x = str(x or "").strip()
-        if x and x not in merged:
+        if not x:
+            continue
+        if is_technical_catalog_area(x):
+            continue
+        if x not in merged:
+            merged.append(x)
+
+    # Integra solo chiavi categories che sembrano aree reali.
+    for x in (db.get("categories", {}) or {}).keys():
+        x = str(x or "").strip()
+        if not x:
+            continue
+        if is_technical_catalog_area(x):
+            continue
+        if x not in merged:
             merged.append(x)
 
     db["catalog_areas"] = merged
 
-    # Ogni area deve esistere anche come chiave categories,
-    # altrimenti non compare nella gestione categorie figlie.
+    # Ogni area reale deve esistere anche come chiave categories.
     cats = db.setdefault("categories", {})
     for x in merged:
         cats.setdefault(x, {})
 
-    return merged
+    # Rimuove eventuali chiavi tecniche finite per errore nel catalogo aree.
+    for bad in list(cats.keys()):
+        if is_technical_catalog_area(bad):
+            # Rimuove solo se è una chiave vuota/non strutturata, per evitare perdita dati.
+            value = cats.get(bad)
+            if value in ({}, [], None, ""):
+                cats.pop(bad, None)
 
+    return merged
 
 def add_catalog_area(db, payload):
     name = str((payload or {}).get("name", "")).strip()
     if not name:
         raise ValueError("Nome area obbligatorio")
 
+    if is_technical_catalog_area(name):
+        raise ValueError("Nome area riservato al sistema")
+
     areas = get_catalog_areas(db)
     if name not in areas:
         areas.append(name)
 
+    db["catalog_areas"] = clean_catalog_areas_list(areas)
     db.setdefault("categories", {}).setdefault(name, {})
-    db["catalog_areas"] = areas
-    return {"ok": True, "areas": areas}
 
+    return {"ok": True, "areas": db["catalog_areas"]}
 
 def delete_catalog_area(db, name):
     name = str(name or "").strip()
     if not name:
         raise ValueError("Area non valida")
 
+    if is_technical_catalog_area(name):
+        # Non deve nemmeno comparire, ma se compare la puliamo.
+        db["catalog_areas"] = [x for x in clean_catalog_areas_list(db.get("catalog_areas", [])) if x != name]
+        db.setdefault("categories", {}).pop(name, None)
+        return {"ok": True, "areas": get_catalog_areas(db)}
+
     used = False
 
-    # Materiali/componenti realmente collegati all'area.
     for section_key in ["materials", "components"]:
         for item in (db.get(section_key, {}) or {}).values():
             if isinstance(item, dict) and str(item.get("section", "")).strip() == name:
                 used = True
 
-    # Fornitori realmente collegati all'area.
     for supplier in (db.get("suppliers", {}) or {}).values():
         if isinstance(supplier, dict):
             if name in list(supplier.get("sections", []) or []):
@@ -3824,8 +3851,6 @@ def delete_catalog_area(db, name):
                 if isinstance(link, dict) and str(link.get("section", "")).strip() == name:
                     used = True
 
-    # Categorie figlie reali.
-    # La sola chiave categories[name] vuota NON deve bloccare l'eliminazione.
     categories = db.setdefault("categories", {})
     area_categories = categories.get(name, {})
 
@@ -3839,13 +3864,11 @@ def delete_catalog_area(db, name):
     if used:
         raise ValueError("Area già usata: elimina prima categorie, materiali o collegamenti fornitori")
 
-    areas = [x for x in get_catalog_areas(db) if str(x or "").strip() != name]
+    areas = [x for x in clean_catalog_areas_list(db.get("catalog_areas", [])) if str(x or "").strip() != name]
     db["catalog_areas"] = areas
-
-    # Ora posso rimuovere anche la chiave vuota dalle categorie.
     categories.pop(name, None)
 
-    return {"ok": True, "areas": areas}
+    return {"ok": True, "areas": get_catalog_areas(db)}
 
 def get_wood_treatments(db):
     treatments = db.setdefault("wood_treatments", [])
@@ -3958,3 +3981,33 @@ def inject_pdf_back_button(html):
 
     return html
 
+
+
+def is_technical_catalog_area(name):
+    value = str(name or "").strip()
+    return value.lower() in {
+        "materials",
+        "components",
+        "products",
+        "sales",
+        "quotes",
+        "customers",
+        "suppliers",
+        "categories",
+        "formats",
+        "thicknesses",
+        "typologies",
+    }
+
+
+def clean_catalog_areas_list(values):
+    cleaned = []
+    for x in values or []:
+        x = str(x or "").strip()
+        if not x:
+            continue
+        if is_technical_catalog_area(x):
+            continue
+        if x not in cleaned:
+            cleaned.append(x)
+    return cleaned
