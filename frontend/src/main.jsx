@@ -151,7 +151,10 @@ function SmartInput({ label, options = [], hint = '', value, onChange, ...props 
   return <Field label={label} hint={hint || (opts.length ? `${opts.length} suggerimenti collegati al database` : 'Puoi scrivere un nuovo valore')}>
     <input {...props} value={value ?? ''} onChange={onChange} list={opts.length ? id : undefined} autoComplete="off" />
     {opts.length > 0 && <datalist id={id}>{opts.slice(0, 250).map(v => <option key={v} value={v} />)}</datalist>}
-    {filtered.length > 0 && <div className="suggestions">{filtered.map(v => <button type="button" key={v} onMouseDown={e => { e.preventDefault(); choose(v); }}>{v}</button>)}</div>}
+    {filtered.length > 0 && <div className="suggestions compact-suggestions">
+      {filtered.slice(0, 5).map(v => <button type="button" key={v} onMouseDown={e => { e.preventDefault(); choose(v); }}>{v}</button>)}
+      {filtered.length > 5 && <small>+{filtered.length - 5} altri suggerimenti: continua a scrivere per filtrare</small>}
+    </div>}
   </Field>;
 }
 function Card({ title, icon: Icon, children, sub, action, className = '' }) { return <section className={`card ${className}`}><header><div>{title && <h2>{Icon && <Icon />}{title}</h2>}{sub && <p>{sub}</p>}</div>{action && <div className="card-actions">{action}</div>}</header>{children}</section>; }
@@ -172,6 +175,34 @@ const inventoryFilterLabel = {
   sotto_scorta: 'Sotto scorta'
 };
 function PageTitle({ title, desc, children }) { return <div className="page-title"><div><p>Gestionale artigianale</p><h1>{title}</h1><span>{desc}</span></div>{children}</div>; }
+function DetailModal({ title, subtitle, icon: Icon, onClose, children }) {
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key === 'Escape') onClose?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return <div className="modal-backdrop" onMouseDown={onClose}>
+    <div className="detail-modal" onMouseDown={e => e.stopPropagation()}>
+      <div className="detail-modal-head">
+        <div className="detail-modal-title">
+          {Icon && <Icon />}
+          <div>
+            <h2>{title}</h2>
+            {subtitle && <p>{subtitle}</p>}
+          </div>
+        </div>
+        <button className="ghost modal-close" onClick={onClose}>Chiudi</button>
+      </div>
+      <div className="detail-modal-body">
+        {children}
+      </div>
+    </div>
+  </div>;
+}
+
 function FlowPill({ n, title, desc, detail, icon: Icon, active }) { return <div className={`flow-pill ${active ? 'active' : ''}`}><div className="flow-pill-top"><b>{n}</b>{Icon && <Icon />}</div><div className="flow-pill-copy"><span>{title}</span><small>{desc}</small>{detail && <em>{detail}</em>}</div></div>; }
 
 function Studio({ go }) {
@@ -257,6 +288,10 @@ function Materials({ toast }) {
     <PageTitle title="Acquisti" desc="Gestisci materie prime e componenti acquistati: fornitore, categoria, sottocategoria, formato, costo e stock." />
     <ErrorBox msg={error} />
     <Card title="Acquisto rapido" icon={PackagePlus} sub="Compila da sinistra a destra: i suggerimenti cambiano in base a sezione e categoria." action={<button className="primary" form="purchase"><Save /> Salva acquisto</button>}>
+      <div className="logic-path">
+        <span>Percorso logico di compilazione</span>
+        <b>Area</b><em>→</em><b>Fornitore</b><em>→</em><b>Categoria</b><em>→</em><b>Sottocategoria</b><em>→</em><b>Formato</b><em>→</em><b>Spessore</b>
+      </div>
       <form id="purchase" onSubmit={add} className="form-grid buy-grid">
         <Select label="Area" value={f.section} onChange={e => setF({ ...f, section: e.target.value, category: '', subcategory: '', size: '', thickness: '' })}>{list(opt.raw_sections).map(x => <option key={x}>{x}</option>)}</Select>
         <SmartInput label="Fornitore" options={suppliersForRaw(sug, f.section, f.category, f.subcategory)} value={f.supplier} onChange={e => setF({ ...f, supplier: e.target.value, category: '', subcategory: '', size: '', thickness: '' })} hint="Se scegli un fornitore già collegato, categorie e sottocategorie vengono filtrate su quel fornitore" />
@@ -296,11 +331,19 @@ function Materials({ toast }) {
         </div> }
       ]} />}
     </Card>
-    {materialDetail && <Card title="Dettaglio materiale" icon={Archive} sub="Storico acquisti, utilizzo nei prodotti e stato economico dell’articolo." action={<button className="ghost" onClick={() => setMaterialDetail(null)}>Chiudi</button>}>
+    {materialDetail && <DetailModal title="Dettaglio materiale" subtitle="Storico acquisti, utilizzo nei prodotti e stato economico dell’articolo." icon={Archive} onClose={() => setMaterialDetail(null)}>
+      <div className="detail-hero">
+        <div>
+          <span>Articolo</span>
+          <strong>{materialDetail.name || '—'}</strong>
+          <small>{[materialDetail.item?.section, materialDetail.item?.category, materialDetail.item?.subcategory].filter(Boolean).join(' · ')}</small>
+        </div>
+        <InventoryBadge item={materialDetail.item || {}} />
+      </div>
       <div className="detail-grid">
-        <Stat label="Articolo" value={materialDetail.name || '—'} />
         <Stat label="Stock" value={`${num(materialDetail.item?.stock)} ${materialDetail.item?.unit || ''}`} />
         <Stat label="Costo medio" value={money(materialDetail.item?.weighted_average_cost ?? materialDetail.item?.cost_per_unit)} />
+        <Stat label="Ultimo costo" value={money(materialDetail.item?.last_unit_cost)} />
         <Stat label="Valore stock" value={money(materialDetail.stock_value)} />
       </div>
       <div className="detail-columns">
@@ -322,7 +365,7 @@ function Materials({ toast }) {
           ]} />
         </div>
       </div>
-    </Card>}
+    </DetailModal>}
   </>;
 }
 
@@ -387,17 +430,25 @@ function ProductWarehouse({ products, refresh, toast, onEdit, onDelete }) {
         </div> }
       ]} />
     </Card>
-    {productDetail && <Card title="Dettaglio prodotto finito" icon={PackageCheck} sub="Distinta base, costi interni, movimenti e vendite collegate." action={<button className="ghost" onClick={() => setProductDetail(null)}>Chiudi</button>}>
+    {productDetail && <DetailModal title="Dettaglio prodotto finito" subtitle="Distinta base, costi interni, movimenti e vendite collegate." icon={PackageCheck} onClose={() => setProductDetail(null)}>
+      <div className="detail-hero">
+        <div>
+          <span>Prodotto</span>
+          <strong>{productDetail.name || '—'}</strong>
+          <small>{[productDetail.product?.category, productDetail.product?.subcategory, productDetail.product?.collection].filter(Boolean).join(' · ')}</small>
+        </div>
+        <span className="quote-status accepted">scheda prodotto</span>
+      </div>
       <div className="detail-grid">
-        <Stat label="Prodotto" value={productDetail.name || '—'} />
         <Stat label="Stock" value={`${num(productDetail.stock)} ${productDetail.product?.unit || 'pz'}`} />
         <Stat label="Costo interno/u" value={money(productDetail.unit_cost)} />
+        <Stat label="Materiali/u" value={money(productDetail.material_cost)} />
         <Stat label="Valore stock" value={money(productDetail.value)} />
       </div>
       <div className="detail-grid compact-detail">
-        <Stat label="Materiali/u" value={money(productDetail.material_cost)} />
         <Stat label="Lavoro/u" value={money(productDetail.labor_cost)} />
         <Stat label="Extra/u" value={money(productDetail.extra_cost)} />
+        <Stat label="Movimenti" value={list(productDetail.movements).length} />
       </div>
       <div className="detail-columns">
         <div>
@@ -420,7 +471,7 @@ function ProductWarehouse({ products, refresh, toast, onEdit, onDelete }) {
           ]} />
         </div>
       </div>
-    </Card>}
+    </DetailModal>}
   </>;
 }
 
