@@ -3763,7 +3763,7 @@ def quote_project_fee_html(quote):
 # ---------------------------------------------------------------------------
 
 def default_catalog_areas():
-    return ["Falegnameria", "Ferramenta", "Illuminazione", "Finiture"]
+    return ["Falegnameria", "Ferramenta", "Illuminazione", "Accessori"]
 
 
 def get_catalog_areas(db):
