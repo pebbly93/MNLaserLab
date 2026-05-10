@@ -1526,9 +1526,9 @@ function Quote({ toast }) {
 
     const backendBase =
       window.location.protocol === 'file:'
-        ? 'http://127.0.0.1:8000'
+        ? `http://${window.location.hostname}:8000`
         : window.location.origin.includes('5173')
-          ? 'http://127.0.0.1:8000'
+          ? `http://${window.location.hostname}:8000`
           : window.location.origin;
 
     const url = `${backendBase}/api/quote-pdf/${type}?id=${encodeURIComponent(q.id)}`;

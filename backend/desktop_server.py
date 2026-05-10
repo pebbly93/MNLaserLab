@@ -34,4 +34,4 @@ if dist is not None:
 
 if __name__ == "__main__":
     port = int(os.environ.get("MN_BACKEND_PORT", "8000"))
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+    uvicorn.run(app, host=os.environ.get("MN_BACKEND_HOST", "0.0.0.0"), port=port, log_level="info")

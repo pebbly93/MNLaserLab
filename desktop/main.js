@@ -6,6 +6,12 @@ const { spawn } = require("child_process");
 let mainWindow = null;
 let backendProcess = null;
 
+
+// v40.9.3 - LAN mode.
+// Backend FastAPI ascolta su 0.0.0.0, ma Electron apre l'app su 127.0.0.1.
+process.env.MN_BACKEND_HOST = process.env.MN_BACKEND_HOST || "0.0.0.0";
+process.env.MN_BACKEND_PORT = process.env.MN_BACKEND_PORT || "8000";
+
 const PORT = process.env.MN_BACKEND_PORT || "8000";
 const APP_URL = `http://127.0.0.1:${PORT}/`;
 const HEALTH_URL = `http://127.0.0.1:${PORT}/api/health`;
