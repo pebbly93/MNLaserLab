@@ -987,27 +987,62 @@ def production_check(db, product_name, qty):
     return {"can_produce": all(r["ok"] for r in rows), "rows": rows}
 
 
+
 def produce_product(db, product_name, qty, substitutions=None):
     substitutions = substitutions or {}
     check = production_check(db, product_name, qty)
     deductions = []
+
     for row in check["rows"]:
-        if row["ok"]: deductions.append((row["table"], row["key"], row["needed"]))
+        if row["ok"]:
+            deductions.append((row["table"], row["key"], row["needed"]))
+            continue
+
+        sub = substitutions.get(str(row["index"])) or substitutions.get(row["index"])
+
+        if not sub:
+            raise ValueError(f"Materiale mancante non risolto: {row['name']}")
+
+        # v40.1.2: supporto produzione mista.
+        # Accetta:
+        # substitutions[index] = {"table": "...", "key": "..."}             vecchio modo
+        # substitutions[index] = {"mix": [{"table": "...", "key": "...", "qty": 1}, ...]}
+        if isinstance(sub, dict) and isinstance(sub.get("mix"), list):
+            total_mix = 0.0
+            for part in sub.get("mix", []):
+                part_qty = parse_float(part.get("qty"))
+                if part_qty <= 0:
+                    continue
+                deductions.append((part.get("table"), part.get("key"), part_qty))
+                total_mix += part_qty
+
+            if total_mix + 0.000001 < parse_float(row["needed"]):
+                raise ValueError(
+                    f"Sostituzione parziale insufficiente per {row['name']}: "
+                    f"richiesto {row['needed']:.2f}, coperto {total_mix:.2f}"
+                )
         else:
-            sub = substitutions.get(str(row["index"])) or substitutions.get(row["index"])
-            if not sub: raise ValueError(f"Materiale mancante non risolto: {row['name']}")
             deductions.append((sub["table"], sub["key"], row["needed"]))
+
     for table, key, need in deductions:
-        if key not in db.get(table, {}): raise ValueError(f"Materiale non trovato: {key}")
-        if parse_float(db[table][key].get("stock")) < need: raise ValueError(f"Stock insufficiente per {display_name_from_key(key, db[table][key])}")
+        if table not in db or key not in db.get(table, {}):
+            raise ValueError(f"Materiale non trovato: {key}")
+        if parse_float(db[table][key].get("stock")) + 0.000001 < need:
+            raise ValueError(
+                f"Stock insufficiente per {display_name_from_key(key, db[table][key])}: "
+                f"disponibile {parse_float(db[table][key].get('stock')):.2f}, richiesto {need:.2f}"
+            )
+
     for table, key, need in deductions:
         db[table][key]["stock"] = parse_float(db[table][key].get("stock")) - need
+
     db["products"][product_name]["stock"] = parse_float(db["products"][product_name].get("stock")) + qty
-    return {"ok": True, "deductions": deductions, "new_stock": db["products"][product_name]["stock"]}
 
-
-
-
+    return {
+        "ok": True,
+        "deductions": deductions,
+        "new_stock": db["products"][product_name]["stock"]
+    }
 
 def calculate_quote(db, payload):
     rows = payload.get("rows", []) or []

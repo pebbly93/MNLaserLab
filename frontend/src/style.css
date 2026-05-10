@@ -2036,3 +2036,133 @@ main,
 .catalog-areas .catalog-list button:nth-child(3).selected {
   border-color: rgba(250, 204, 21, .62);
 }
+
+
+/* v40.1.2 linked config scroll and mixed production */
+
+/* Colonna 4 più alta e realmente scorrevole */
+.catalog-linked {
+  max-height: calc(100vh - 230px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 10px;
+}
+
+.catalog-linked .catalog-config-card {
+  margin-bottom: 12px;
+}
+
+.catalog-linked .pill-list {
+  max-height: 210px;
+}
+
+/* Desktop larghi: diamo più spazio alla configurazione collegata */
+@media (min-width: 1281px) {
+  .catalog-workbench {
+    grid-template-columns:
+      minmax(165px, .62fr)
+      minmax(220px, .92fr)
+      minmax(220px, .92fr)
+      minmax(360px, 1.55fr);
+  }
+
+  .catalog-linked {
+    min-height: calc(100vh - 270px);
+  }
+}
+
+/* Produzione mista */
+.mixed-production-box {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(59, 130, 246, .26);
+  background: rgba(59, 130, 246, .09);
+  border-radius: 18px;
+  padding: 12px;
+}
+
+.mixed-production-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.mixed-production-head span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.mixed-production-head b {
+  display: block;
+  font-size: 16px;
+  margin-top: 3px;
+}
+
+.mixed-production-head small {
+  display: block;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.mix-lines {
+  display: grid;
+  gap: 8px;
+}
+
+.mix-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 36px;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(255,255,255,.055);
+  border-radius: 14px;
+  padding: 9px;
+}
+
+.mix-line b,
+.mix-line small {
+  display: block;
+  min-width: 0;
+}
+
+.mix-line b {
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mix-line small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mix-line input {
+  min-height: 36px;
+  text-align: right;
+}
+
+.mix-line button {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+@media (max-width: 800px) {
+  .mixed-production-head,
+  .mix-line {
+    grid-template-columns: 1fr;
+  }
+
+  .mix-line input {
+    text-align: left;
+  }
+}

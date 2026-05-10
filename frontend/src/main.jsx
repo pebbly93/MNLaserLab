@@ -398,6 +398,7 @@ function ProductionBox({ products, refresh, toast }) {
   const [qty, setQty] = useState(1);
   const [check, setCheck] = useState(null);
   const [substitutions, setSubstitutions] = useState({});
+  const [mixDrafts, setMixDrafts] = useState({});
 
   async function checkNow() {
     if (!name) return;
@@ -405,6 +406,7 @@ function ProductionBox({ products, refresh, toast }) {
       const result = await postJSON(`/products/${encodeURIComponent(name)}/check-production`, { qty });
       setCheck(result);
       setSubstitutions({});
+      setMixDrafts({});
     } catch (e) {
       toast(e.message, 'err');
     }
@@ -422,6 +424,7 @@ function ProductionBox({ products, refresh, toast }) {
       toast('Produzione completata');
       setCheck(null);
       setSubstitutions({});
+      setMixDrafts({});
       refresh();
     } catch (e) {
       toast(e.message, 'err');
@@ -430,16 +433,107 @@ function ProductionBox({ products, refresh, toast }) {
 
   const rows = list(check?.rows);
   const missingRows = rows.filter(r => !r.ok);
-  const allResolved = !missingRows.length || missingRows.every(r => substitutions[String(r.index)]);
+  const isResolved = row => {
+    const sub = substitutions[String(row.index)];
+    if (!sub) return false;
+    if (Array.isArray(sub.mix)) {
+      const total = sub.mix.reduce((a, x) => a + Number(x.qty || 0), 0);
+      return total + 0.000001 >= Number(row.needed || 0);
+    }
+    return true;
+  };
+  const allResolved = !missingRows.length || missingRows.every(isResolved);
+
+  function originalPart(row) {
+    const available = Number(row.available || 0);
+    const needed = Number(row.needed || 0);
+    const qtyUse = Math.max(0, Math.min(available, needed));
+    if (qtyUse <= 0) return null;
+    return {
+      table: row.table,
+      key: row.key,
+      name: row.name,
+      qty: qtyUse,
+      original: true
+    };
+  }
 
   function chooseVariant(row, variant) {
+    const needed = Number(row.needed || 0);
+    const part = originalPart(row);
+    const remaining = Math.max(0, needed - Number(part?.qty || 0));
+    const variantQty = Math.min(Number(variant.stock || 0), remaining || needed);
+
+    const mix = [];
+    if (part) mix.push(part);
+    mix.push({
+      table: variant.table,
+      key: variant.key,
+      name: variant.name,
+      qty: variantQty
+    });
+
     setSubstitutions(v => ({
       ...v,
       [String(row.index)]: {
-        table: variant.table,
-        key: variant.key,
-        name: variant.name
+        mix
       }
+    }));
+  }
+
+  function setMixQty(row, partIndex, value) {
+    const key = String(row.index);
+    const current = substitutions[key];
+    if (!current?.mix) return;
+
+    const nextMix = current.mix.map((part, i) => i === partIndex ? { ...part, qty: Number(value || 0) } : part);
+
+    setSubstitutions(v => ({
+      ...v,
+      [key]: {
+        mix: nextMix
+      }
+    }));
+  }
+
+  function addVariantToMix(row, variant) {
+    const key = String(row.index);
+    const current = substitutions[key]?.mix || [];
+    const exists = current.some(x => x.table === variant.table && x.key === variant.key);
+
+    if (exists) {
+      toast('Alternativa già presente nel mix', 'err');
+      return;
+    }
+
+    const covered = current.reduce((a, x) => a + Number(x.qty || 0), 0);
+    const remaining = Math.max(0, Number(row.needed || 0) - covered);
+    const qtyToUse = Math.min(Number(variant.stock || 0), remaining || 1);
+
+    setSubstitutions(v => ({
+      ...v,
+      [key]: {
+        mix: [
+          ...current,
+          {
+            table: variant.table,
+            key: variant.key,
+            name: variant.name,
+            qty: qtyToUse
+          }
+        ]
+      }
+    }));
+  }
+
+  function removeMixPart(row, partIndex) {
+    const key = String(row.index);
+    const current = substitutions[key]?.mix || [];
+    const nextMix = current.filter((_, i) => i !== partIndex);
+
+    setSubstitutions(v => ({
+      ...v,
+      [key]: nextMix.length ? { mix: nextMix } : undefined
     }));
   }
 
@@ -451,9 +545,18 @@ function ProductionBox({ products, refresh, toast }) {
     });
   }
 
+  function mixTotal(row) {
+    const sub = substitutions[String(row.index)];
+    return list(sub?.mix).reduce((a, x) => a + Number(x.qty || 0), 0);
+  }
+
+  function mixRemaining(row) {
+    return Math.max(0, Number(row.needed || 0) - mixTotal(row));
+  }
+
   return <div className="production-panel">
     <div className="inline">
-      <select value={name} onChange={e => { setName(e.target.value); setCheck(null); setSubstitutions({}); }}>
+      <select value={name} onChange={e => { setName(e.target.value); setCheck(null); setSubstitutions({}); setMixDrafts({}); }}>
         <option value="">Scegli prodotto</option>
         {list(products).map(p => <option key={p.name}>{p.name}</option>)}
       </select>
@@ -470,12 +573,14 @@ function ProductionBox({ products, refresh, toast }) {
         ? 'Materiali sufficienti per produrre.'
         : allResolved
           ? 'Materiali mancanti risolti con alternative selezionate. Puoi produrre.'
-          : 'Alcuni materiali risultano insufficienti. Scegli una sostituzione logica.'}
+          : 'Alcuni materiali risultano insufficienti. Scegli una sostituzione logica o crea un mix.'}
     </div>}
 
     {rows.length > 0 && <div className="production-check-list">
       {rows.map(row => {
         const selected = substitutions[String(row.index)];
+        const total = mixTotal(row);
+        const remaining = mixRemaining(row);
 
         return <div key={row.index} className={row.ok ? 'production-row ok' : 'production-row missing'}>
           <div className="production-row-head">
@@ -488,31 +593,45 @@ function ProductionBox({ products, refresh, toast }) {
             {row.ok
               ? <span className="quote-status accepted">Disponibile</span>
               : selected
-                ? <span className="quote-status sent">Sostituito</span>
+                ? <span className={remaining <= 0 ? 'quote-status accepted' : 'quote-status sent'}>{remaining <= 0 ? 'Risolto' : 'Parziale'}</span>
                 : <span className="quote-status rejected">Mancante</span>}
           </div>
 
           {!row.ok && <div className="variant-panel">
-            {selected && <div className="selected-variant">
-              <span>Alternativa selezionata</span>
-              <b>{selected.name}</b>
-              <button className="ghost" onClick={() => clearVariant(row)}>Cambia</button>
+            {selected?.mix && <div className="mixed-production-box">
+              <div className="mixed-production-head">
+                <div>
+                  <span>Mix produzione</span>
+                  <b>{num(total)} / {num(row.needed)} {row.unit || ''}</b>
+                  <small>{remaining > 0 ? `Mancano ancora ${num(remaining)} ${row.unit || ''}` : 'Quantità coperta'}</small>
+                </div>
+                <button className="ghost" onClick={() => clearVariant(row)}>Svuota mix</button>
+              </div>
+
+              <div className="mix-lines">
+                {selected.mix.map((part, i) => <div className="mix-line" key={i}>
+                  <div>
+                    <b>{part.name}</b>
+                    <small>{part.original ? 'materiale originale disponibile' : 'alternativa selezionata'}</small>
+                  </div>
+                  <input type="number" step="0.01" value={part.qty} onChange={e => setMixQty(row, i, e.target.value)} />
+                  <button className="ghost danger" onClick={() => removeMixPart(row, i)}>×</button>
+                </div>)}
+              </div>
             </div>}
 
-            {!selected && <>
-              <h4>Alternative consigliate in base a categoria, formato, spessore e stock</h4>
-              {list(row.variants).length ? <div className="variant-grid">
-                {list(row.variants).map(v => <button key={v.table + v.key} type="button" className="variant-card" onClick={() => chooseVariant(row, v)}>
-                  <div>
-                    <b>{v.name}</b>
-                    <small>{[v.category, v.subcategory, v.size, v.thickness].filter(Boolean).join(' · ')}</small>
-                  </div>
-                  <span>Stock: {num(v.stock)} {v.unit || ''}</span>
-                  <em>{v.notes}</em>
-                  <strong>{v.can_cover ? 'Copre produzione' : 'Stock parziale'}</strong>
-                </button>)}
-              </div> : <Empty text="Nessuna alternativa logica trovata" />}
-            </>}
+            <h4>Alternative consigliate in base a categoria, formato, spessore e stock</h4>
+            {list(row.variants).length ? <div className="variant-grid">
+              {list(row.variants).map(v => <button key={v.table + v.key} type="button" className="variant-card" onClick={() => selected?.mix ? addVariantToMix(row, v) : chooseVariant(row, v)}>
+                <div>
+                  <b>{v.name}</b>
+                  <small>{[v.category, v.subcategory, v.size, v.thickness].filter(Boolean).join(' · ')}</small>
+                </div>
+                <span>Stock: {num(v.stock)} {v.unit || ''}</span>
+                <em>{v.notes}</em>
+                <strong>{v.can_cover ? 'Copre produzione' : 'Stock parziale'}</strong>
+              </button>)}
+            </div> : <Empty text="Nessuna alternativa logica trovata" />}
           </div>}
         </div>;
       })}
