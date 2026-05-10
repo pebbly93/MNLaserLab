@@ -1326,7 +1326,7 @@ function Quote({ toast }) {
   const [quoteNotes, setQuoteNotes] = useState('');
   const [materialSearch, setMaterialSearch] = useState('');
   const [filters, setFilters] = useState({ supplier: '', section: '', category: '', subcategory: '' });
-  const [cost, setCost] = useState({ hours: '', rate: '', packaging: '', energy: '', wear: '', commission: '', margin: '30', discount: '' });
+  const [cost, setCost] = useState({ hours: '', rate: '', packaging: '', energy: '', wear: '', commission: '', project_fee: '', margin: '30', discount: '' });
 
   useEffect(() => {
     if (!business || Object.keys(business).length === 0) return;
@@ -1566,7 +1566,7 @@ function Quote({ toast }) {
   }
 
   const costLabels = {
-    hours: 'Ore lavoro', rate: 'Tariffa €/h', packaging: 'Imballaggio €', energy: 'Energia €', wear: 'Usura macchina €', commission: 'Commissioni %', margin: 'Margine %', discount: 'Sconto %'
+    hours: 'Ore lavoro', rate: 'Tariffa €/h', packaging: 'Imballaggio €', energy: 'Energia €', wear: 'Usura macchina €', commission: 'Commissioni %', project_fee: 'Spese di progetto €', margin: 'Margine %', discount: 'Sconto %'
   };
 
   return <>
@@ -1655,12 +1655,12 @@ function Quote({ toast }) {
         { key: 'value', label: 'Valore', render: r => money(r.potential_value || r.recommended || r.discounted) },
         { key: 'act', label: 'Azioni', render: r => <div className="table-actions">
           
-          {(r.status === 'accettato' || r.status === 'in_produzione') && <button className="workflow-action production" onClick={() => startQuoteProduction(r)}>Produzione</button>}
-          {r.status === 'accettato' && <button className="workflow-action product" onClick={() => createProductFromQuote(r)}>Crea prodotto</button>}
-          {(r.status === 'accettato' || r.status === 'in_produzione') && <button className="workflow-action sale" onClick={() => registerQuoteSale(r)}>Registra vendita</button>}
-          {r.status === 'in_produzione' && <button className="workflow-action delivered" onClick={() => markQuoteDelivered(r)}>Consegnato</button>}
-          <button className="ghost" onClick={() => openQuotePdf(r, 'customer')}>PDF cliente</button>
-          <button className="ghost" onClick={() => openQuotePdf(r, 'internal')}>PDF interno</button>
+          {(r.status === 'accettato' || r.status === 'in_produzione') && <button className="quote-action quote-action-production" onClick={() => startQuoteProduction(r)}>Produzione</button>}
+          {r.status === 'accettato' && <button className="quote-action quote-action-product" onClick={() => createProductFromQuote(r)}>Crea prodotto</button>}
+          {(r.status === 'accettato' || r.status === 'in_produzione') && <button className="quote-action quote-action-sale" onClick={() => registerQuoteSale(r)}>Registra vendita</button>}
+          {r.status === 'in_produzione' && <button className="quote-action quote-action-delivered" onClick={() => markQuoteDelivered(r)}>Consegnato</button>}
+          <button className="quote-action quote-action-pdf" onClick={() => openQuotePdf(r, 'customer')}>PDF cliente</button>
+          <button className="quote-action quote-action-pdf-internal" onClick={() => openQuotePdf(r, 'internal')}>PDF interno</button>
           <button className="ghost" onClick={() => changeQuoteStatus(r, 'sent')}>Inviato</button>
           <button className="ghost" onClick={() => changeQuoteStatus(r, 'accepted')}>Accettato</button>
           <button className="ghost" onClick={() => changeQuoteStatus(r, 'rejected')}>Rifiutato</button>

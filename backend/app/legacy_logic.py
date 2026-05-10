@@ -1107,6 +1107,7 @@ def produce_product(db, product_name, qty, substitutions=None):
     }
 
 def calculate_quote(db, payload):
+    project_fee = parse_float(payload.get("project_fee"))
     rows = payload.get("rows", []) or []
     estimates = payload.get("estimates", payload.get("estimated_materials", [])) or []
 
@@ -1239,7 +1240,6 @@ def calculate_quote(db, payload):
         "rows": checked_rows,
         "blocked": blocked,
     }
-
 def record_product_sale(db, payload):
     name = payload.get("product") or payload.get("name")
     qty = parse_float(payload.get("qty")); price = parse_float(payload.get("unit_price"))
@@ -1618,6 +1618,7 @@ def save_quote(db, payload):
         "potential_value": result.get("discounted") or result.get("recommended") or 0,
     }
 
+    quote["project_fee"] = parse_float(payload.get("project_fee"))
     quotes = db.setdefault("quotes", [])
     replaced = False
 
@@ -2292,7 +2293,8 @@ def quote_customer_html(db, quote_id):
         </thead>
         <tbody>
           {rows_html}
-        </tbody>
+        {quote_project_fee_html(quote)}
+</tbody>
       </table>
     </section>
 
@@ -2484,7 +2486,8 @@ def quote_internal_html(db, quote_id):
         </thead>
         <tbody>
           {material_rows}
-        </tbody>
+        {quote_project_fee_html(quote)}
+</tbody>
       </table>
     </section>
 
@@ -3297,3 +3300,16 @@ def quote_mark_delivered(db, quote_id):
         "id": quote.get("id", quote_id),
         "status": "consegnato",
     }
+
+
+def quote_project_fee_html(quote):
+    fee = parse_float((quote or {}).get("project_fee"))
+    if fee <= 0:
+        return ""
+    return f"""
+      <tr>
+        <td>Spese di progetto</td>
+        <td class="right">1.00 pz</td>
+        <td class="right">€ {fee:.2f}</td>
+      </tr>
+    """
