@@ -3777,6 +3777,13 @@ def get_catalog_areas(db):
             merged.append(x)
 
     db["catalog_areas"] = merged
+
+    # Ogni area deve esistere anche come chiave categories,
+    # altrimenti non compare nella gestione categorie figlie.
+    cats = db.setdefault("categories", {})
+    for x in merged:
+        cats.setdefault(x, {})
+
     return merged
 
 
@@ -3789,6 +3796,7 @@ def add_catalog_area(db, payload):
     if name not in areas:
         areas.append(name)
 
+    db.setdefault("categories", {}).setdefault(name, {})
     db["catalog_areas"] = areas
     return {"ok": True, "areas": areas}
 
