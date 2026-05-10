@@ -537,3 +537,35 @@ button {
 .buy-grid {
   overflow: visible;
 }
+
+
+/* v39.6 detail panels */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0 18px;
+}
+
+.detail-grid.compact-detail {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.detail-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.detail-columns h3 {
+  margin: 8px 0 10px;
+  font-size: 15px;
+}
+
+@media (max-width: 1000px) {
+  .detail-grid,
+  .detail-grid.compact-detail,
+  .detail-columns {
+    grid-template-columns: 1fr;
+  }
+}

@@ -681,3 +681,11 @@ def global_search_api(q: str = ""):
 @app.get("/api/workflow/alerts")
 def workflow_alerts_api():
     return workflow_alerts(load_db())
+
+
+@app.get("/api/products/{name:path}/detail")
+def product_detail_api(name: str):
+    try:
+        return product_detail(load_db(), name)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))

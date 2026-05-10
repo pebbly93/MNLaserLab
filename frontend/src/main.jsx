@@ -232,6 +232,7 @@ function Materials({ toast }) {
   const { data: sug, refresh: refreshSug } = useApi('/suggestions', {});
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [materialDetail, setMaterialDetail] = useState(null);
   const [f, setF] = useState({ section: 'Falegnameria', supplier: '', category: '', subcategory: '', size: '', thickness: '', unit: 'pz', quantity: 1, total_cost: 0 });
   const generated = useMemo(() => {
     const isWood = f.section === 'Falegnameria';
@@ -245,6 +246,13 @@ function Materials({ toast }) {
   });
   async function add(e) { e.preventDefault(); try { await postJSON('/purchase', { ...f, name: generated }); toast('Acquisto registrato'); setF(v => ({ ...v, quantity: 1, total_cost: 0, size: '', thickness: '' })); await refresh(); refreshSug(); } catch (e) { toast(e.message, 'err'); } }
   async function remove(r) { if (!confirm('Eliminare questo articolo?')) return; try { await del('/raw/' + encodeURIComponent(r.table) + '/' + encodeURIComponent(r.key)); toast('Articolo eliminato'); refresh(); } catch (e) { toast(e.message, 'err'); } }
+  async function openMaterialDetail(r) {
+    try {
+      setMaterialDetail(await getJSON('/raw-detail/' + encodeURIComponent(r.table) + '/' + encodeURIComponent(r.key)));
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
   return <>
     <PageTitle title="Acquisti" desc="Gestisci materie prime e componenti acquistati: fornitore, categoria, sottocategoria, formato, costo e stock." />
     <ErrorBox msg={error} />
@@ -282,9 +290,39 @@ function Materials({ toast }) {
         { key: 'cost', label: 'Costo medio', render: r => money(r.weighted_average_cost ?? r.cost_per_unit) },
         { key: 'last', label: 'Ultimo acquisto', render: r => <span className="muted-cell">{r.last_supplier ? `${r.last_supplier} · ${money(r.last_unit_cost)}` : '—'}</span> },
         { key: 'sup', label: 'Fornitori', render: r => <span className="muted-cell">{r.supplier_details || '—'}</span> },
-        { key: 'act', label: '', render: r => <button className="ghost danger" onClick={() => remove(r)}><Trash2 /></button> }
+        { key: 'act', label: 'Azioni', render: r => <div className="table-actions">
+          <button className="ghost" onClick={() => openMaterialDetail(r)}>Dettaglio</button>
+          <button className="ghost danger" onClick={() => remove(r)}><Trash2 /></button>
+        </div> }
       ]} />}
     </Card>
+    {materialDetail && <Card title="Dettaglio materiale" icon={Archive} sub="Storico acquisti, utilizzo nei prodotti e stato economico dell’articolo." action={<button className="ghost" onClick={() => setMaterialDetail(null)}>Chiudi</button>}>
+      <div className="detail-grid">
+        <Stat label="Articolo" value={materialDetail.name || '—'} />
+        <Stat label="Stock" value={`${num(materialDetail.item?.stock)} ${materialDetail.item?.unit || ''}`} />
+        <Stat label="Costo medio" value={money(materialDetail.item?.weighted_average_cost ?? materialDetail.item?.cost_per_unit)} />
+        <Stat label="Valore stock" value={money(materialDetail.stock_value)} />
+      </div>
+      <div className="detail-columns">
+        <div>
+          <h3>Storico acquisti</h3>
+          <DataTable rows={list(materialDetail.purchase_history).slice(0, 12)} empty="Nessuno storico acquisti" columns={[
+            { key: 'date', label: 'Data' },
+            { key: 'supplier', label: 'Fornitore' },
+            { key: 'qty', label: 'Q.tà', render: r => num(r.qty) },
+            { key: 'unit_cost', label: 'Costo/u', render: r => money(r.unit_cost) },
+            { key: 'total_cost', label: 'Totale', render: r => money(r.total_cost) }
+          ]} />
+        </div>
+        <div>
+          <h3>Usato nei prodotti</h3>
+          <DataTable rows={list(materialDetail.used_in_products)} empty="Non risulta usato in prodotti" columns={[
+            { key: 'product', label: 'Prodotto' },
+            { key: 'qty', label: 'Q.tà BOM', render: r => `${num(r.qty)} ${r.unit || ''}` }
+          ]} />
+        </div>
+      </div>
+    </Card>}
   </>;
 }
 
@@ -300,10 +338,18 @@ function ProductionBox({ products, refresh, toast }) {
 function ProductWarehouse({ products, refresh, toast, onEdit, onDelete }) {
   const [q, setQ] = useState('');
   const [movement, setMovement] = useState({ product: '', qty: '', reason: 'Rettifica inventario', note: '' });
+  const [productDetail, setProductDetail] = useState(null);
   const rows = list(products).filter(x => [x.name, x.category, x.subcategory, x.collection].join(' ').toLowerCase().includes(q.toLowerCase()));
   const totalStock = rows.reduce((a, r) => a + Number(r.stock || 0), 0);
   const totalValue = rows.reduce((a, r) => a + Number(r.value || 0), 0);
   const lowStock = rows.filter(r => Number(r.stock || 0) <= 1).length;
+  async function openProductDetail(name) {
+    try {
+      setProductDetail(await getJSON(`/products/${encodeURIComponent(name)}/detail`));
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
   async function adjust(sign = 1) {
     if (!movement.product || Number(movement.qty || 0) <= 0) { toast('Scegli prodotto e quantità valida', 'err'); return; }
     try {
@@ -335,11 +381,46 @@ function ProductWarehouse({ products, refresh, toast, onEdit, onDelete }) {
         { key: 'stock', label: 'Disponibilità', render: r => <span className={Number(r.stock || 0) <= 1 ? 'stock-low' : 'stock-ok'}>{num(r.stock)} {r.unit || 'pz'}</span> },
         { key: 'value', label: 'Valore stock', render: r => money(r.value) },
         { key: 'act', label: 'Azioni', render: r => <div className="table-actions">
+          <button className="ghost" onClick={() => openProductDetail(r.name)}>Dettaglio</button>
           <button className="ghost" onClick={() => onEdit(r)}>Modifica</button>
           <button className="ghost danger" onClick={() => onDelete(r.name)}>Elimina</button>
         </div> }
       ]} />
     </Card>
+    {productDetail && <Card title="Dettaglio prodotto finito" icon={PackageCheck} sub="Distinta base, costi interni, movimenti e vendite collegate." action={<button className="ghost" onClick={() => setProductDetail(null)}>Chiudi</button>}>
+      <div className="detail-grid">
+        <Stat label="Prodotto" value={productDetail.name || '—'} />
+        <Stat label="Stock" value={`${num(productDetail.stock)} ${productDetail.product?.unit || 'pz'}`} />
+        <Stat label="Costo interno/u" value={money(productDetail.unit_cost)} />
+        <Stat label="Valore stock" value={money(productDetail.value)} />
+      </div>
+      <div className="detail-grid compact-detail">
+        <Stat label="Materiali/u" value={money(productDetail.material_cost)} />
+        <Stat label="Lavoro/u" value={money(productDetail.labor_cost)} />
+        <Stat label="Extra/u" value={money(productDetail.extra_cost)} />
+      </div>
+      <div className="detail-columns">
+        <div>
+          <h3>Distinta base</h3>
+          <DataTable rows={list(productDetail.bom)} empty="Nessuna distinta base" columns={[
+            { key: 'label', label: 'Materiale' },
+            { key: 'qty', label: 'Q.tà', render: r => `${num(r.qty)} ${r.unit || ''}` },
+            { key: 'unit_cost', label: 'Costo/u', render: r => money(r.unit_cost) },
+            { key: 'cost', label: 'Costo', render: r => money(r.cost) },
+            { key: 'ok', label: 'Stock', render: r => r.ok ? 'OK' : 'Da verificare' }
+          ]} />
+        </div>
+        <div>
+          <h3>Movimenti</h3>
+          <DataTable rows={list(productDetail.movements).slice(0, 12)} empty="Nessun movimento" columns={[
+            { key: 'date', label: 'Data' },
+            { key: 'qty', label: 'Q.tà', render: r => num(r.qty) },
+            { key: 'reason', label: 'Causale' },
+            { key: 'note', label: 'Note' }
+          ]} />
+        </div>
+      </div>
+    </Card>}
   </>;
 }
 

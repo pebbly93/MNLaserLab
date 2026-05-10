@@ -1685,3 +1685,71 @@ def workflow_alerts(db):
             "low_product_stock": low_product_stock[:8],
         }
     }
+
+
+# ---------------------------------------------------------------------------
+# v39.6.0 - Dettaglio prodotti finiti
+# ---------------------------------------------------------------------------
+
+def product_detail(db, name):
+    product = db.get("products", {}).get(name)
+    if not isinstance(product, dict):
+        raise ValueError("Prodotto non trovato")
+
+    material_cost = product_material_unit_cost(db, name)
+    labor_cost = product_labor_unit_cost(db, name)
+    extra_cost = parse_float(product.get("extra_unit_cost"))
+    unit_cost = product_unit_cost(db, name)
+    stock = parse_float(product.get("stock"))
+    value = stock * unit_cost
+
+    bom_rows = []
+    for row in product.get("bom", []) or []:
+        raw_name = row.get("name", "")
+        item, table, key = get_raw_item(db, raw_name)
+        unit_cost_raw = 0.0
+        available = 0.0
+        item_label = raw_name
+
+        if item:
+            enrich_raw_item(db, table, key, item)
+            unit_cost_raw = parse_float(item.get("weighted_average_cost", item.get("cost_per_unit")))
+            available = parse_float(item.get("stock"))
+            item_label = display_name_from_key(key, item)
+
+        qty = parse_float(row.get("qty"))
+
+        bom_rows.append({
+            "name": raw_name,
+            "label": item_label,
+            "qty": qty,
+            "unit": row.get("unit", item.get("unit", "") if item else ""),
+            "unit_cost": unit_cost_raw,
+            "cost": qty * unit_cost_raw,
+            "available": available,
+            "ok": available >= qty if item else False,
+        })
+
+    movements = [
+        x for x in db.get("product_movements", [])
+        if x.get("product") == name
+    ]
+
+    sales = [
+        x for x in db.get("sales", [])
+        if x.get("product") == name
+    ]
+
+    return {
+        "name": name,
+        "product": product,
+        "stock": stock,
+        "unit_cost": unit_cost,
+        "material_cost": material_cost,
+        "labor_cost": labor_cost,
+        "extra_cost": extra_cost,
+        "value": value,
+        "bom": bom_rows,
+        "movements": list(reversed(movements)),
+        "sales": list(reversed(sales)),
+    }
