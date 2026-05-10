@@ -771,3 +771,26 @@ button {
     flex-direction: column;
   }
 }
+
+
+/* v39.6.2 contextual suggestions */
+.logic-path {
+  display: none !important;
+}
+
+.compact-suggestions {
+  margin-top: 5px;
+  gap: 5px;
+}
+
+.compact-suggestions button {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field small,
+.field .hint {
+  line-height: 1.25;
+}

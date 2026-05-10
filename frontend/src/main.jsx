@@ -36,6 +36,34 @@ const suppliersForRaw = (s, sec, cat, sub) => {
   return unique([...(exact || []), ...(scoped || []), ...(s?.suppliers || [])]);
 };
 
+const rawCatsStrict = (s, sec) => {
+  if (!sec) return [];
+  const scoped = pick(s, ['raw_categories_by_scope', sec], []);
+  return unique(scoped);
+};
+
+const rawSubsStrict = (s, sec, cat) => {
+  if (!sec || !cat) return [];
+  const scoped = pick(s, ['raw_subcategories_by_scope_category', sec, cat], []);
+  return unique(scoped);
+};
+
+const rawCatsForSupplierStrict = (s, supplier, sec) => {
+  if (!sec) return [];
+  const linked = pick(s, ['raw_categories_by_supplier_scope', supplier, sec], []);
+  const scoped = rawCatsStrict(s, sec);
+  if (supplier && linked.length) return unique(linked);
+  return scoped;
+};
+
+const rawSubsForSupplierStrict = (s, supplier, sec, cat) => {
+  if (!sec || !cat) return [];
+  const linked = pick(s, ['raw_subcategories_by_supplier_scope_category', supplier, sec, cat], []);
+  const scoped = rawSubsStrict(s, sec, cat);
+  if (supplier && linked.length) return unique(linked);
+  return scoped;
+};
+
 function useApi(path, initial) {
   const [data, setData] = useState(initial);
   const [loading, setLoading] = useState(true);
@@ -288,15 +316,11 @@ function Materials({ toast }) {
     <PageTitle title="Acquisti" desc="Gestisci materie prime e componenti acquistati: fornitore, categoria, sottocategoria, formato, costo e stock." />
     <ErrorBox msg={error} />
     <Card title="Acquisto rapido" icon={PackagePlus} sub="Compila da sinistra a destra: i suggerimenti cambiano in base a sezione e categoria." action={<button className="primary" form="purchase"><Save /> Salva acquisto</button>}>
-      <div className="logic-path">
-        <span>Percorso logico di compilazione</span>
-        <b>Area</b><em>→</em><b>Fornitore</b><em>→</em><b>Categoria</b><em>→</em><b>Sottocategoria</b><em>→</em><b>Formato</b><em>→</em><b>Spessore</b>
-      </div>
       <form id="purchase" onSubmit={add} className="form-grid buy-grid">
-        <Select label="Area" value={f.section} onChange={e => setF({ ...f, section: e.target.value, category: '', subcategory: '', size: '', thickness: '' })}>{list(opt.raw_sections).map(x => <option key={x}>{x}</option>)}</Select>
+        <Select label="Area" value={f.section} onChange={e => setF({ ...f, section: e.target.value, supplier: '', category: '', subcategory: '', size: '', thickness: '' })}>{list(opt.raw_sections).map(x => <option key={x}>{x}</option>)}</Select>
         <SmartInput label="Fornitore" options={suppliersForRaw(sug, f.section, f.category, f.subcategory)} value={f.supplier} onChange={e => setF({ ...f, supplier: e.target.value, category: '', subcategory: '', size: '', thickness: '' })} hint="Se scegli un fornitore già collegato, categorie e sottocategorie vengono filtrate su quel fornitore" />
-        <SmartInput label="Categoria" placeholder="Legname, Acrilico, LED..." options={rawCatsForSupplier(sug, f.supplier, f.section)} value={f.category} onChange={e => setF({ ...f, category: e.target.value, subcategory: '', size: '', thickness: '' })} hint={f.supplier ? `Categorie collegate a ${f.supplier}` : 'Scegli prima il fornitore per filtrare il catalogo'} />
-        <SmartInput label="Sottocategoria" placeholder="Betulla, Pioppo, Strisce LED..." options={rawSubsForSupplier(sug, f.supplier, f.section, f.category)} value={f.subcategory} onChange={e => setF({ ...f, subcategory: e.target.value, size: '' })} hint={f.supplier && f.category ? 'Sottocategorie filtrate per fornitore + categoria' : 'Seleziona categoria per filtrare'} />
+        <SmartInput label="Categoria" placeholder="Legname, Acrilico, LED..." options={rawCatsForSupplierStrict(sug, f.supplier, f.section)} value={f.category} onChange={e => setF({ ...f, category: e.target.value, subcategory: '', size: '', thickness: '' })} hint={f.section ? `Categorie disponibili per ${f.section}` : 'Scegli prima l’area'} />
+        <SmartInput label="Sottocategoria" placeholder="Betulla, Pioppo, Strisce LED..." options={rawSubsForSupplierStrict(sug, f.supplier, f.section, f.category)} value={f.subcategory} onChange={e => setF({ ...f, subcategory: e.target.value, size: '' })} hint={f.category ? `Sottocategorie di ${f.category}` : 'Scegli prima una categoria'} />
         <SmartInput label="Formato / tipo" options={unique([...formats(sug, f.category), ...typologies(sug, f.category, f.subcategory)])} value={f.size} onChange={e => setF({ ...f, size: e.target.value })} />
         <SmartInput label="Spessore" options={thicknesses(sug, f.category)} value={f.thickness} onChange={e => setF({ ...f, thickness: e.target.value })} />
         <SmartInput label="Unità" options={sug.units} value={f.unit} onChange={e => setF({ ...f, unit: e.target.value })} />
