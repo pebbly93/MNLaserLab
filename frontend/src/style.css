@@ -5705,3 +5705,88 @@ input[type="submit"] {
     max-height: none;
   }
 }
+
+
+/* v41.2.5 hard scroll category config card */
+
+/* La pagina categorie deve poter scorrere sempre */
+body,
+html,
+#root {
+  min-height: 100%;
+}
+
+.main,
+.content,
+.page,
+.app-main {
+  overflow-y: auto;
+}
+
+/* Card 4: Configurazioni collegate */
+.catalog-board > *:nth-child(4),
+.catalog-grid > *:nth-child(4),
+.setup-catalog-grid > *:nth-child(4),
+.category-manager-grid > *:nth-child(4),
+[class*="catalog"] > *:nth-child(4),
+[class*="category"] > *:nth-child(4) {
+  max-height: 650px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  min-height: 0 !important;
+}
+
+/* Contenuti interni della card 4 */
+.catalog-board > *:nth-child(4) *,
+.catalog-grid > *:nth-child(4) *,
+.setup-catalog-grid > *:nth-child(4) *,
+.category-manager-grid > *:nth-child(4) * {
+  min-width: 0;
+}
+
+/* Se la quarta card contiene configurazioni lunghe, abilita scroll anche sui blocchi interni */
+.config-linked-card,
+.linked-config-card,
+.catalog-config-card,
+.setup-config-card,
+.config-panel,
+.config-list {
+  max-height: 650px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* Scrollbar visibile ma discreta */
+.catalog-board > *:nth-child(4)::-webkit-scrollbar,
+.catalog-grid > *:nth-child(4)::-webkit-scrollbar,
+.setup-catalog-grid > *:nth-child(4)::-webkit-scrollbar,
+.category-manager-grid > *:nth-child(4)::-webkit-scrollbar,
+.config-linked-card::-webkit-scrollbar,
+.linked-config-card::-webkit-scrollbar,
+.catalog-config-card::-webkit-scrollbar,
+.setup-config-card::-webkit-scrollbar {
+  width: 8px;
+}
+
+.catalog-board > *:nth-child(4)::-webkit-scrollbar-thumb,
+.catalog-grid > *:nth-child(4)::-webkit-scrollbar-thumb,
+.setup-catalog-grid > *:nth-child(4)::-webkit-scrollbar-thumb,
+.category-manager-grid > *:nth-child(4)::-webkit-scrollbar-thumb,
+.config-linked-card::-webkit-scrollbar-thumb,
+.linked-config-card::-webkit-scrollbar-thumb,
+.catalog-config-card::-webkit-scrollbar-thumb,
+.setup-config-card::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, .38);
+  border-radius: 999px;
+}
+
+@media (max-width: 900px) {
+  .catalog-board > *:nth-child(4),
+  .catalog-grid > *:nth-child(4),
+  .setup-catalog-grid > *:nth-child(4),
+  .category-manager-grid > *:nth-child(4),
+  [class*="catalog"] > *:nth-child(4),
+  [class*="category"] > *:nth-child(4) {
+    max-height: none !important;
+  }
+}

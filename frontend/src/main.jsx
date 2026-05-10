@@ -1825,8 +1825,7 @@ function CatalogAdvancedSettings({ toast, refreshSug }) {
 
 function Setup({ toast }) {
   const { data: tax, refresh: refreshTax } = useApi('/taxonomy', { raw_tree: [], product_tree: [], supplier_matrix: [] });
-  const { data: catalogAreas, refresh: refreshAreas } = useApi('/catalog/areas', []);
-  const { data: sug, refresh: refreshSug } = useApi('/suggestions', {});
+const { data: sug, refresh: refreshSug } = useApi('/suggestions', {});
 
   const [mode, setMode] = useState('raw');
   const [q, setQ] = useState('');
@@ -1840,7 +1839,7 @@ function Setup({ toast }) {
   const [typologyDraft, setTypologyDraft] = useState('');
   const [productDraft, setProductDraft] = useState({ category: '', subcategory: '', collection: '' });
 
-  const rawAreas = list(rawTreeWithAreas);
+  const rawAreas = list(tax.raw_tree);
   const activeArea = rawAreas.find(a => a.scope === selectedArea || a.label === selectedArea) || rawAreas[0] || { scope: 'materials', label: 'Falegnameria', categories: [] };
   const areaScope = activeArea.scope;
   const areaLabel = activeArea.label;
@@ -1866,40 +1865,9 @@ function Setup({ toast }) {
     const text = [r.category, r.subcategory, r.collection].join(' ').toLowerCase();
     return !q || q.toLowerCase().split(/\s+/).every(part => text.includes(part));
   });
-
-  
-  const rawTreeWithAreas = (() => {
-    const base = list(tax.raw_tree).map(sec => ({
-      ...sec,
-      label: sec.label || sec.name || sec.section || sec.key || '',
-      name: sec.name || sec.label || sec.section || sec.key || '',
-      categories: list(sec.categories),
-    }));
-
-    const seen = new Set(base.map(sec => String(sec.label || sec.name || '').trim()).filter(Boolean));
-
-    for (const area of list(catalogAreas)) {
-      const name = String(area || '').trim();
-      if (!name || seen.has(name)) continue;
-
-      base.push({
-        key: name,
-        label: name,
-        name,
-        section: name,
-        categories: [],
-      });
-
-      seen.add(name);
-    }
-
-    return base;
-  })();
-
 async function reloadCatalog() {
     await refreshTax();
-      refreshAreas?.();
-    await refreshSug();
+await refreshSug();
   }
 
   async function save(path, obj, msg) {

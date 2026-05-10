@@ -318,6 +318,51 @@ def add_preset(payload: Payload):
     return mutate(fn)
 
 
+def ensure_custom_areas_in_taxonomy(db, result):
+    """
+    Garantisce che /api/taxonomy includa anche le aree catalogo vuote.
+    Serve per farle comparire nella colonna 'Aree' prima di creare categorie figlie.
+    """
+    if not isinstance(result, dict):
+        return result
+
+    raw_tree = result.setdefault("raw_tree", [])
+
+    seen = set()
+    for sec in raw_tree:
+        if not isinstance(sec, dict):
+            continue
+        label = str(sec.get("label") or sec.get("name") or sec.get("section") or sec.get("key") or "").strip()
+        if label:
+            seen.add(label)
+
+    areas = []
+    for a in db.get("catalog_areas", []) or []:
+        a = str(a or "").strip()
+        if a and a not in areas:
+            areas.append(a)
+
+    # Integra anche eventuali chiavi già presenti in categories.
+    for a in (db.get("categories", {}) or {}).keys():
+        a = str(a or "").strip()
+        if a and a not in areas:
+            areas.append(a)
+
+    for area in areas:
+        if area in seen:
+            continue
+
+        raw_tree.append({
+            "key": area,
+            "label": area,
+            "name": area,
+            "section": area,
+            "categories": [],
+        })
+        seen.add(area)
+
+    return result
+
 @app.get("/api/taxonomy")
 def taxonomy():
     db = load_db()
@@ -363,8 +408,8 @@ def taxonomy():
             key = tuple(row.values())
             if row["category"] and key not in seen:
                 seen.add(key); matrix.append(row)
-    return {"raw_tree": raw_tree, "product_tree": product_tree, "supplier_matrix": sorted(matrix, key=lambda x:(x["supplier"], x["section"], x["category"], x["subcategory"]))}
-
+    result = {"raw_tree": raw_tree, "product_tree": product_tree, "supplier_matrix": sorted(matrix, key=lambda x:(x["supplier"], x["section"], x["category"], x["subcategory"]))}
+    return ensure_custom_areas_in_taxonomy(db, result)
 @app.post("/api/supplier-links")
 def supplier_link(payload: Payload):
     def fn(db):
