@@ -3105,26 +3105,22 @@ def apply_pdf_brand_to_html(db, html, kind="customer", quote=None):
 
     project_fee = parse_float(quote.get("project_fee"))
 
-    # Logo fallback MN se non è stato caricato un logo nelle impostazioni.
     if not logo:
         logo = (
             "data:image/svg+xml;utf8,"
-            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'>"
-            "<rect width='160' height='160' rx='34' fill='%23f8fafc'/>"
-            "<circle cx='80' cy='80' r='62' fill='white' stroke='%23058482' stroke-width='6'/>"
-            "<text x='80' y='76' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='34' font-weight='900' fill='%230f172a'>MN</text>"
-            "<text x='80' y='103' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='13' font-weight='700' fill='%23058482'>LASER LAB</text>"
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'>"
+            "<rect width='180' height='180' rx='38' fill='%23ffffff'/>"
+            "<circle cx='90' cy='90' r='68' fill='%23f8fafc' stroke='%23058482' stroke-width='7'/>"
+            "<text x='90' y='86' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='39' font-weight='900' fill='%230f172a'>MN</text>"
+            "<text x='90' y='116' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='14' font-weight='800' fill='%23058482'>LASER LAB</text>"
             "</svg>"
         )
 
     contact_bits = [x for x in [author, email, phone, address, website, vat] if str(x or "").strip()]
     contact_line = " · ".join(contact_bits)
 
-    # Pulizia residui patch precedenti.
     html = html.replace("{_pdf_brand_css(db)}", "")
     html = html.replace("{_pdf_brand_block(db)}", "")
-
-    # Sostituzioni dinamiche.
     html = html.replace("#058482", color)
     html = html.replace("MN Laser Lab", company)
 
@@ -3150,9 +3146,8 @@ def apply_pdf_brand_to_html(db, html, kind="customer", quote=None):
         "MN Laser Lab - Creazioni artigianali in legno e taglio laser",
     ]
 
-    business_subtitle = footer or "Creazioni artigianali in legno e taglio laser"
     for old in old_subtitles:
-        html = html.replace(old, business_subtitle)
+        html = html.replace(old, footer or "Creazioni artigianali in legno e taglio laser")
 
     if intro:
         html = html.replace(
@@ -3169,24 +3164,24 @@ def apply_pdf_brand_to_html(db, html, kind="customer", quote=None):
     if footer:
         html = html.replace("Preventivo generato con MN Laser Lab Manager.", footer)
 
-    # Rimuove eventuale testata duplicata nata dalle patch precedenti.
-    html = re.sub(
-        r"<div class=['\"]brand-head['\"].*?</div>\s*</div>",
-        "",
-        html,
-        flags=re.DOTALL
-    )
+    try:
+        html = re.sub(
+            r"<div class=['\"]brand-head['\"].*?</div>\s*</div>",
+            "",
+            html,
+            flags=re.DOTALL
+        )
+    except Exception:
+        pass
 
-    # Inserisce il logo nella testata esistente.
     if "pdf-brand-logo-inline" not in html:
         logo_html = f"<img class='pdf-brand-logo-inline' src='{logo}' alt='Logo MN Laser Lab' />"
         html = html.replace(
             f"<h1>{company}</h1>",
-            f"<div class='pdf-brand-title-row'>{logo_html}<div><h1>{company}</h1><p class='pdf-dynamic-contact'>{contact_line}</p></div></div>",
+            f"<div class='pdf-brand-title-row'>{logo_html}<div class='pdf-brand-text'><h1>{company}</h1><p class='pdf-dynamic-contact'>{contact_line}</p></div></div>",
             1
         )
 
-    # Se il contatto non è entrato, lo aggiunge sotto il titolo.
     if contact_line and contact_line not in html:
         html = html.replace(
             f"<h1>{company}</h1>",
@@ -3194,11 +3189,13 @@ def apply_pdf_brand_to_html(db, html, kind="customer", quote=None):
             1
         )
 
-    # Spese di progetto: voce separata nel PDF solo se > 0.
     if project_fee > 0 and "pdf-project-fee" not in html:
         project_fee_html = f"""
         <div class="pdf-project-fee">
-          <span>Spese di progetto</span>
+          <div>
+            <span>Voce aggiuntiva</span>
+            <b>Spese di progetto</b>
+          </div>
           <strong>€ {project_fee:.2f}</strong>
         </div>
         """
@@ -3208,68 +3205,100 @@ def apply_pdf_brand_to_html(db, html, kind="customer", quote=None):
         else:
             html = html.replace("</body>", project_fee_html + "\n</body>", 1)
 
-    # CSS professionale PDF.
     extra_css = f"""
     <style>
       :root {{
         --brand: {color};
+        --brand-dark: #046b69;
         --ink: #0f172a;
         --muted: #64748b;
         --line: #e2e8f0;
         --soft: #f8fafc;
+        --paper: #ffffff;
+      }}
+
+      * {{
+        box-sizing: border-box;
       }}
 
       body {{
-        background: #f1f5f9 !important;
+        background: #e5e7eb !important;
         color: var(--ink) !important;
         font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif !important;
         margin: 0 !important;
-        padding: 34px 0 44px !important;
+        padding: 38px 0 48px !important;
+        -webkit-font-smoothing: antialiased;
       }}
 
-      .page, main, .document, .quote-page {{
+      body > *:not(.print-button):not(.print-actions):not(button) {{
+        max-width: 920px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+      }}
+
+      .page, main, .document, .quote-page, .container {{
         width: min(920px, calc(100vw - 64px)) !important;
         margin: 0 auto !important;
         background: #ffffff !important;
+        border-radius: 22px !important;
+        box-shadow: 0 28px 80px rgba(15, 23, 42, .14) !important;
+        padding: 34px 38px !important;
       }}
 
       .pdf-brand-title-row {{
         display: flex !important;
         align-items: center !important;
-        gap: 16px !important;
+        gap: 18px !important;
       }}
 
       .pdf-brand-logo-inline {{
-        width: 74px !important;
-        height: 74px !important;
+        width: 78px !important;
+        height: 78px !important;
         object-fit: contain !important;
         display: block !important;
         flex: 0 0 auto !important;
+        border-radius: 18px !important;
+      }}
+
+      .pdf-brand-text {{
+        min-width: 0 !important;
       }}
 
       .pdf-dynamic-contact {{
-        margin: 5px 0 0 !important;
+        margin: 7px 0 0 !important;
         color: var(--muted) !important;
-        font-size: 13px !important;
-        line-height: 1.35 !important;
+        font-size: 12.5px !important;
+        line-height: 1.45 !important;
         font-weight: 600 !important;
+        max-width: 560px !important;
       }}
 
       h1 {{
         margin: 0 !important;
-        font-size: 28px !important;
+        font-size: 29px !important;
         line-height: 1.05 !important;
-        letter-spacing: -0.04em !important;
+        letter-spacing: -0.045em !important;
+        color: var(--ink) !important;
       }}
 
       h2, h3 {{
-        letter-spacing: -0.025em !important;
+        color: var(--ink) !important;
+        letter-spacing: -0.03em !important;
+      }}
+
+      p {{
+        color: #334155 !important;
+        line-height: 1.55 !important;
       }}
 
       table {{
         width: 100% !important;
-        border-collapse: collapse !important;
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
         table-layout: fixed !important;
+        overflow: hidden !important;
+        border-radius: 14px !important;
+        border: 1px solid var(--line) !important;
       }}
 
       th {{
@@ -3277,16 +3306,22 @@ def apply_pdf_brand_to_html(db, html, kind="customer", quote=None):
         color: #475569 !important;
         font-size: 11px !important;
         text-transform: uppercase !important;
-        letter-spacing: .06em !important;
-        padding: 12px 13px !important;
+        letter-spacing: .07em !important;
+        padding: 12px 14px !important;
+        border-bottom: 1px solid var(--line) !important;
       }}
 
       td {{
-        padding: 13px !important;
+        padding: 14px !important;
         border-bottom: 1px solid #e5e7eb !important;
         color: #1e293b !important;
         font-size: 13px !important;
-        line-height: 1.35 !important;
+        line-height: 1.38 !important;
+        vertical-align: middle !important;
+      }}
+
+      tr:last-child td {{
+        border-bottom: 0 !important;
       }}
 
       td:last-child,
@@ -3298,25 +3333,36 @@ def apply_pdf_brand_to_html(db, html, kind="customer", quote=None):
       .pdf-project-fee {{
         margin: 18px 0 10px !important;
         border: 1px solid rgba(5, 132, 130, .22) !important;
-        background: linear-gradient(135deg, rgba(5,132,130,.08), rgba(5,132,130,.03)) !important;
-        border-radius: 16px !important;
-        padding: 15px 18px !important;
+        background: linear-gradient(135deg, rgba(5,132,130,.09), rgba(5,132,130,.025)) !important;
+        border-radius: 18px !important;
+        padding: 16px 20px !important;
         display: flex !important;
         align-items: center !important;
         justify-content: space-between !important;
-        gap: 18px !important;
+        gap: 20px !important;
         color: var(--ink) !important;
       }}
 
       .pdf-project-fee span {{
-        font-size: 13px !important;
-        font-weight: 800 !important;
-        color: #334155 !important;
+        display: block !important;
+        font-size: 10.5px !important;
+        font-weight: 900 !important;
+        color: var(--brand) !important;
+        letter-spacing: .08em !important;
+        text-transform: uppercase !important;
+        margin-bottom: 3px !important;
+      }}
+
+      .pdf-project-fee b {{
+        display: block !important;
+        font-size: 15px !important;
+        color: #1e293b !important;
       }}
 
       .pdf-project-fee strong {{
-        font-size: 22px !important;
+        font-size: 23px !important;
         color: var(--brand) !important;
+        white-space: nowrap !important;
       }}
 
       .print-button,
@@ -3325,18 +3371,27 @@ def apply_pdf_brand_to_html(db, html, kind="customer", quote=None):
         position: fixed;
         top: 24px;
         right: 24px;
+        z-index: 99;
       }}
 
       @media print {{
+        @page {{
+          size: A4;
+          margin: 14mm;
+        }}
+
         body {{
           background: white !important;
           padding: 0 !important;
         }}
 
-        .page, main, .document, .quote-page {{
+        .page, main, .document, .quote-page, .container, body > * {{
           width: 100% !important;
+          max-width: 100% !important;
           margin: 0 !important;
           box-shadow: none !important;
+          border-radius: 0 !important;
+          padding: 0 !important;
         }}
 
         .print-button, .print-actions, button {{
