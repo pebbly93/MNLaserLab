@@ -3756,3 +3756,153 @@ def quote_project_fee_html(quote):
         <td class="right">€ {fee:.2f}</td>
       </tr>
     """
+
+
+# ---------------------------------------------------------------------------
+# v41.1.0 - Aree catalogo personalizzabili + trattamenti legno
+# ---------------------------------------------------------------------------
+
+def default_catalog_areas():
+    return ["Falegnameria", "Ferramenta", "Illuminazione", "Finiture"]
+
+
+def get_catalog_areas(db):
+    areas = db.setdefault("catalog_areas", [])
+
+    # Migrazione morbida: integra le aree standard e quelle già ricavate dai dati.
+    merged = []
+    for x in default_catalog_areas() + list(areas) + list(raw_section_choices(db)):
+        x = str(x or "").strip()
+        if x and x not in merged:
+            merged.append(x)
+
+    db["catalog_areas"] = merged
+    return merged
+
+
+def add_catalog_area(db, payload):
+    name = str((payload or {}).get("name", "")).strip()
+    if not name:
+        raise ValueError("Nome area obbligatorio")
+
+    areas = get_catalog_areas(db)
+    if name not in areas:
+        areas.append(name)
+
+    db["catalog_areas"] = areas
+    return {"ok": True, "areas": areas}
+
+
+def delete_catalog_area(db, name):
+    name = str(name or "").strip()
+    if not name:
+        raise ValueError("Area non valida")
+
+    # Non eliminare se usata in materiali/componenti/fornitori/categorie.
+    used = False
+
+    for section_key in ["materials", "components"]:
+        for item in (db.get(section_key, {}) or {}).values():
+            if isinstance(item, dict) and str(item.get("section", "")).strip() == name:
+                used = True
+
+    for supplier in (db.get("suppliers", {}) or {}).values():
+        if isinstance(supplier, dict):
+            if name in list(supplier.get("sections", []) or []):
+                used = True
+            for link in list(supplier.get("links", []) or []):
+                if isinstance(link, dict) and str(link.get("section", "")).strip() == name:
+                    used = True
+
+    categories = db.get("categories", {}) or {}
+    if name in categories:
+        used = True
+
+    if used:
+        raise ValueError("Area già usata: non può essere eliminata")
+
+    areas = [x for x in get_catalog_areas(db) if x != name]
+    db["catalog_areas"] = areas
+
+    # Se esiste come chiave vuota in categories, rimuovila.
+    db.setdefault("categories", {}).pop(name, None)
+
+    return {"ok": True, "areas": areas}
+
+
+def get_wood_treatments(db):
+    treatments = db.setdefault("wood_treatments", [])
+
+    if not treatments:
+        treatments.extend([
+            {
+                "name": "Nessuno",
+                "type": "semplice",
+                "steps": [],
+                "unit_cost": 0,
+                "labor_hours": 0,
+                "notes": "Nessun trattamento applicato",
+            },
+            {
+                "name": "Mordente + flatting ceroso",
+                "type": "pacchetto",
+                "steps": ["Mordente", "Flatting ceroso"],
+                "unit_cost": 5,
+                "labor_hours": 0.25,
+                "notes": "Finitura effetto legno caldo/protetto",
+            },
+            {
+                "name": "Fondo + colore + trasparente",
+                "type": "pacchetto",
+                "steps": ["Fondo", "Colore", "Trasparente"],
+                "unit_cost": 8,
+                "labor_hours": 0.4,
+                "notes": "Pacchetto smalto completo",
+            },
+        ])
+
+    return treatments
+
+
+def save_wood_treatment(db, payload):
+    payload = payload or {}
+
+    name = str(payload.get("name", "")).strip()
+    if not name:
+        raise ValueError("Nome trattamento obbligatorio")
+
+    treatment = {
+        "name": name,
+        "type": str(payload.get("type", "semplice") or "semplice").strip(),
+        "steps": [str(x).strip() for x in payload.get("steps", []) if str(x).strip()] if isinstance(payload.get("steps"), list) else [x.strip() for x in str(payload.get("steps", "")).split("+") if x.strip()],
+        "unit_cost": parse_float(payload.get("unit_cost")),
+        "labor_hours": parse_float(payload.get("labor_hours")),
+        "notes": str(payload.get("notes", "") or "").strip(),
+    }
+
+    treatments = get_wood_treatments(db)
+
+    for i, existing in enumerate(treatments):
+        if str(existing.get("name", "")).strip().lower() == name.lower():
+            treatments[i] = {**existing, **treatment}
+            db["wood_treatments"] = treatments
+            return {"ok": True, "treatment": treatments[i], "updated": True}
+
+    treatments.append(treatment)
+    db["wood_treatments"] = treatments
+    return {"ok": True, "treatment": treatment, "created": True}
+
+
+def delete_wood_treatment(db, name):
+    name = str(name or "").strip()
+    if not name:
+        raise ValueError("Trattamento non valido")
+
+    if name.lower() == "nessuno":
+        raise ValueError("Il trattamento 'Nessuno' non può essere eliminato")
+
+    treatments = get_wood_treatments(db)
+    treatments = [t for t in treatments if str(t.get("name", "")).strip() != name]
+    db["wood_treatments"] = treatments
+
+    return {"ok": True, "treatments": treatments}

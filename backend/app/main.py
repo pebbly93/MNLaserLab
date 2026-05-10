@@ -54,7 +54,7 @@ def set_state(payload: Payload):
 @app.get("/api/options")
 def options():
     db = load_db()
-    return {"raw_sections": raw_section_choices(db), "product_sections": product_section_choices(db), "categories": db.get("categories", {}), "formats": db.get("formats", {}), "thicknesses": db.get("thicknesses", {}), "typologies": db.get("typologies", {}), "customers": sorted(db.get("customers", {}).keys()), "suppliers": sorted(db.get("suppliers", {}).keys()), "collections": sorted(db.get("product_collections", []))}
+    return {"raw_sections": get_catalog_areas(db), "product_sections": product_section_choices(db), "categories": db.get("categories", {}), "formats": db.get("formats", {}), "thicknesses": db.get("thicknesses", {}), "typologies": db.get("typologies", {}), "customers": sorted(db.get("customers", {}).keys()), "suppliers": sorted(db.get("suppliers", {}).keys()), "collections": sorted(db.get("product_collections", []))}
 
 @app.get("/api/dashboard")
 def dashboard():
@@ -559,7 +559,7 @@ def suggestions(section: str = '', category: str = '', subcategory: str = '', mo
 
     result = {
         'sections': sorted(sections),
-        'raw_sections': raw_section_choices(db),
+        'raw_sections': get_catalog_areas(db),
         'product_sections': product_section_choices(db),
         'suppliers': sorted(suppliers),
         'customers': sorted(customers),
@@ -872,4 +872,42 @@ def quote_register_sale_api(quote_id: str, payload: Payload):
 def quote_mark_delivered_api(quote_id: str):
     def fn(db):
         return quote_mark_delivered(db, quote_id)
+    return mutate(fn)
+
+
+@app.get("/api/catalog/areas")
+def catalog_areas_api():
+    return get_catalog_areas(load_db())
+
+
+@app.post("/api/catalog/areas")
+def add_catalog_area_api(payload: Payload):
+    def fn(db):
+        return add_catalog_area(db, payload.data)
+    return mutate(fn)
+
+
+@app.delete("/api/catalog/areas/{name:path}")
+def delete_catalog_area_api(name: str):
+    def fn(db):
+        return delete_catalog_area(db, name)
+    return mutate(fn)
+
+
+@app.get("/api/catalog/wood-treatments")
+def wood_treatments_api():
+    return get_wood_treatments(load_db())
+
+
+@app.post("/api/catalog/wood-treatments")
+def save_wood_treatment_api(payload: Payload):
+    def fn(db):
+        return save_wood_treatment(db, payload.data)
+    return mutate(fn)
+
+
+@app.delete("/api/catalog/wood-treatments/{name:path}")
+def delete_wood_treatment_api(name: str):
+    def fn(db):
+        return delete_wood_treatment(db, name)
     return mutate(fn)

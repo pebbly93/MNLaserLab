@@ -1686,6 +1686,127 @@ function Sales({ toast }) {
   </>;
 }
 
+
+function CatalogAdvancedSettings({ toast, refreshTax, refreshSug }) {
+  const { data: areas, refresh: refreshAreas } = useApi('/catalog/areas', []);
+  const { data: treatments, refresh: refreshTreatments } = useApi('/catalog/wood-treatments', []);
+  const [areaName, setAreaName] = useState('');
+  const [tr, setTr] = useState({ name: '', type: 'pacchetto', steps: 'Fondo + Colore + Trasparente', unit_cost: '', labor_hours: '', notes: '' });
+
+  async function saveArea() {
+    if (!areaName.trim()) { toast('Inserisci il nome area', 'err'); return; }
+
+    try {
+      await postJSON('/catalog/areas', { name: areaName.trim() });
+      setAreaName('');
+      toast('Area catalogo salvata');
+      refreshAreas();
+      refreshTax?.();
+      refreshSug?.();
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function removeArea(name) {
+    if (!confirm(`Eliminare l'area "${name}"? Puoi eliminarla solo se non è usata.`)) return;
+
+    try {
+      await del('/catalog/areas/' + encodeURIComponent(name));
+      toast('Area eliminata');
+      refreshAreas();
+      refreshTax?.();
+      refreshSug?.();
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function saveTreatment() {
+    if (!tr.name.trim()) { toast('Inserisci il nome trattamento', 'err'); return; }
+
+    const payload = {
+      ...tr,
+      steps: String(tr.steps || '').split('+').map(x => x.trim()).filter(Boolean),
+      unit_cost: Number(tr.unit_cost || 0),
+      labor_hours: Number(tr.labor_hours || 0),
+    };
+
+    try {
+      await postJSON('/catalog/wood-treatments', payload);
+      toast('Trattamento legno salvato');
+      setTr({ name: '', type: 'pacchetto', steps: 'Fondo + Colore + Trasparente', unit_cost: '', labor_hours: '', notes: '' });
+      refreshTreatments();
+      refreshSug?.();
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function removeTreatment(name) {
+    if (!confirm(`Eliminare il trattamento "${name}"?`)) return;
+
+    try {
+      await del('/catalog/wood-treatments/' + encodeURIComponent(name));
+      toast('Trattamento eliminato');
+      refreshTreatments();
+      refreshSug?.();
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  return <div className="catalog-advanced-panel">
+    <Card title="Aree catalogo" icon={Layers3} sub="Crea aree personalizzate oltre Falegnameria, Ferramenta e Illuminazione.">
+      <div className="inline catalog-area-form">
+        <input placeholder="Nuova area, es. Finiture, Packaging, Vernici..." value={areaName} onChange={e => setAreaName(e.target.value)} />
+        <button className="primary" onClick={saveArea}><Plus /> Aggiungi area</button>
+      </div>
+
+      <div className="area-chip-list">
+        {list(areas).map(a => <span key={a} className="area-chip">
+          {a}
+          <button title="Elimina area" onClick={() => removeArea(a)}><Trash2 /></button>
+        </span>)}
+      </div>
+    </Card>
+
+    <Card title="Trattamenti legno" icon={Sparkles} sub="Configura cicli di finitura semplici o pacchetti: mordente, smalto, fondo, trasparente, flatting.">
+      <div className="form-grid treatment-form">
+        <Input label="Nome trattamento" value={tr.name} onChange={e => setTr({ ...tr, name: e.target.value })} placeholder="Pacchetto smalto completo" />
+        <Select label="Tipo" value={tr.type} onChange={e => setTr({ ...tr, type: e.target.value })}>
+          <option value="semplice">Semplice</option>
+          <option value="pacchetto">Pacchetto</option>
+        </Select>
+        <Input label="Fasi" value={tr.steps} onChange={e => setTr({ ...tr, steps: e.target.value })} placeholder="Fondo + Colore + Trasparente" />
+        <Input label="Costo stimato €" type="number" step="0.01" value={tr.unit_cost} onChange={e => setTr({ ...tr, unit_cost: e.target.value })} />
+        <Input label="Ore lavoro" type="number" step="0.01" value={tr.labor_hours} onChange={e => setTr({ ...tr, labor_hours: e.target.value })} />
+        <Input label="Note" value={tr.notes} onChange={e => setTr({ ...tr, notes: e.target.value })} />
+      </div>
+
+      <div className="quick-actions">
+        <button className="primary" onClick={saveTreatment}><Save /> Salva trattamento</button>
+      </div>
+
+      <div className="treatment-list">
+        {list(treatments).map(t => <div key={t.name} className="treatment-row">
+          <div>
+            <b>{t.name}</b>
+            <small>{[t.type, list(t.steps).join(' + ')].filter(Boolean).join(' · ') || '—'}</small>
+            {t.notes && <em>{t.notes}</em>}
+          </div>
+          <div className="treatment-meta">
+            <span>€ {Number(t.unit_cost || 0).toFixed(2)}</span>
+            <span>{Number(t.labor_hours || 0).toFixed(2)} h</span>
+            <button className="ghost danger" onClick={() => removeTreatment(t.name)}><Trash2 /></button>
+          </div>
+        </div>)}
+      </div>
+    </Card>
+  </div>;
+}
+
+
 function Setup({ toast }) {
   const { data: tax, refresh: refreshTax } = useApi('/taxonomy', { raw_tree: [], product_tree: [], supplier_matrix: [] });
   const { data: sug, refresh: refreshSug } = useApi('/suggestions', {});
@@ -1897,6 +2018,7 @@ function Setup({ toast }) {
   };
 
   return <>
+    <CatalogAdvancedSettings toast={toast} refreshTax={refreshTax} refreshSug={refreshSug} />
     <PageTitle title="Catalogo" desc="Gestisci aree, categorie, sottocategorie e configurazioni collegate." />
 
     <Card title="Gestione catalogo" icon={Settings2} >
