@@ -3909,8 +3909,10 @@ def delete_wood_treatment(db, name):
 
 
 def inject_pdf_back_button(html):
+    back_button = """  <button class="back-btn" onclick="window.location.href='/'">← Torna al gestionale</button>"""
+
     if "back-btn" not in html:
-        html = html.replace("<body>", "<body>\n  <button class=\\"back-btn\\" onclick=\\"window.location.href='/'\\">← Torna al gestionale</button>", 1)
+        html = html.replace("<body>", "<body>\n" + back_button, 1)
 
     if ".back-btn" not in html:
         css = """
@@ -3935,6 +3937,7 @@ def inject_pdf_back_button(html):
       }
     }
 """
-        html = html.replace("</style>", css + "\\n  </style>", 1)
+        html = html.replace("</style>", css + "\n  </style>", 1)
 
     return html
+
