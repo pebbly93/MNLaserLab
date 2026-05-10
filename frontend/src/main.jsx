@@ -297,7 +297,7 @@ function ProductionBox({ products, refresh, toast }) {
   return <div className="production-panel"><div className="inline"><select value={name} onChange={e => { setName(e.target.value); setCheck(null); }}><option value="">Scegli prodotto</option>{list(products).map(p => <option key={p.name}>{p.name}</option>)}</select><input type="number" step="0.01" value={qty} onChange={e => setQty(e.target.value)} /><button onClick={checkNow}><Search /> Verifica</button><button className="primary" onClick={produce}><Hammer /> Produci</button></div>{check && <div className={check.can_produce ? 'notice ok' : 'notice warn'}>{check.can_produce ? <CheckCircle2 /> : <AlertTriangle />} {check.can_produce ? 'Materiali sufficienti per produrre.' : 'Alcuni materiali risultano insufficienti. Controlla BOM e magazzino.'}</div>}</div>;
 }
 
-function ProductWarehouse({ products, refresh, toast, onEdit }) {
+function ProductWarehouse({ products, refresh, toast, onEdit, onDelete }) {
   const [q, setQ] = useState('');
   const [movement, setMovement] = useState({ product: '', qty: '', reason: 'Rettifica inventario', note: '' });
   const rows = list(products).filter(x => [x.name, x.category, x.subcategory, x.collection].join(' ').toLowerCase().includes(q.toLowerCase()));
@@ -334,7 +334,10 @@ function ProductWarehouse({ products, refresh, toast, onEdit }) {
         { key: 'unit_cost', label: 'Costo interno/u', render: r => <b>{money(r.unit_cost)}</b> },
         { key: 'stock', label: 'Disponibilità', render: r => <span className={Number(r.stock || 0) <= 1 ? 'stock-low' : 'stock-ok'}>{num(r.stock)} {r.unit || 'pz'}</span> },
         { key: 'value', label: 'Valore stock', render: r => money(r.value) },
-        { key: 'act', label: '', render: r => <button onClick={() => onEdit(r)}>Modifica scheda</button> }
+        { key: 'act', label: 'Azioni', render: r => <div className="table-actions">
+          <button className="ghost" onClick={() => onEdit(r)}>Modifica</button>
+          <button className="ghost danger" onClick={() => onDelete(r.name)}>Elimina</button>
+        </div> }
       ]} />
     </Card>
   </>;
@@ -365,7 +368,7 @@ function Products({ toast }) {
       <button className={area === 'produce' ? 'active' : ''} onClick={() => setArea('produce')}>Produci</button>
       <button className={area === 'movements' ? 'active' : ''} onClick={() => setArea('movements')}>Movimenti</button>
     </div>
-    {area === 'warehouse' && <ProductWarehouse products={products} refresh={() => { refresh(); refreshMovements(); }} toast={toast} onEdit={editProduct} />}
+    {area === 'warehouse' && <ProductWarehouse products={products} refresh={() => { refresh(); refreshMovements(); }} toast={toast} onEdit={editProduct} onDelete={remove} />}
     {area === 'sheet' && <div className="split-main">
       <Card title="Scheda prodotto" icon={Factory} sub="Una creazione MN Laser Lab non dipende da un fornitore: dipende da BOM, tempo, stile e magazzino interno." action={<button className="primary" form="product"><Save /> Salva</button>}>
         <form id="product" onSubmit={save} className="form-grid">
@@ -469,10 +472,16 @@ function Quote({ toast }) {
       toast(`Stock insufficiente: disponibile ${num(it.stock)} ${it.unit || ''}`, 'err');
       return;
     }
+    const unitCost = Number((it.weighted_average_cost ?? it.cost_per_unit) || 0);
     setRows(v => [...v, {
       name: materialKey,
+      key: materialKey,
       qty: qn,
-      cost: qn * Number((it.weighted_average_cost ?? it.cost_per_unit) || 0),
+      stock: Number(it.stock || 0),
+      unit_cost: unitCost,
+      cost_per_unit: unitCost,
+      weighted_average_cost: unitCost,
+      cost: qn * unitCost,
       label: it.name,
       unit: it.unit || '',
       category: it.category || '',

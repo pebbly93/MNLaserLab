@@ -907,43 +907,92 @@ def produce_product(db, product_name, qty, substitutions=None):
 
 
 
+
+
 def calculate_quote(db, payload):
     rows = payload.get("rows", []) or []
-    estimates = payload.get("estimates", []) or []
+    estimates = payload.get("estimates", payload.get("estimated_materials", [])) or []
 
     checked_rows = []
     blocked = []
 
     for row in rows:
-        row_name = row.get("name") or row.get("material") or row.get("item") or ""
+        row = dict(row or {})
+        row_name = row.get("name") or row.get("material") or row.get("item") or row.get("key") or ""
+        qty = parse_float(row.get("qty", row.get("quantity", 1)))
+
+        frontend_unit_cost = parse_float(
+            row.get("unit_cost", row.get("cost_per_unit", row.get("weighted_average_cost", 0)))
+        )
+        frontend_stock = parse_float(row.get("stock", row.get("available", 0)))
+
+        # Se il frontend passa costo e stock dalla riga aggregata, usiamo quelli.
+        # Questo evita falsi blocchi quando il key aggregato non coincide con la riga raw originale.
+        if frontend_unit_cost > 0:
+            if frontend_stock > 0 and qty > frontend_stock:
+                blocked.append({
+                    "name": row.get("label") or row_name,
+                    "reason": "stock insufficiente",
+                    "stock": frontend_stock,
+                    "weighted_average_cost": frontend_unit_cost,
+                    "badge": "stock insufficiente",
+                })
+
+            row["unit_cost"] = frontend_unit_cost
+            row["cost_per_unit"] = frontend_unit_cost
+            row["weighted_average_cost"] = frontend_unit_cost
+            row["cost"] = qty * frontend_unit_cost
+            checked_rows.append(row)
+            continue
+
         item, table, key = get_raw_item(db, row_name)
 
         if item:
             enrich_raw_item(db, table, key, item)
 
-            if not item.get("usable_in_quote"):
+            unit_cost = parse_float(item.get("weighted_average_cost", item.get("cost_per_unit")))
+            stock = parse_float(item.get("stock"))
+
+            if stock <= 0 or unit_cost <= 0:
                 blocked.append({
                     "name": display_name_from_key(key, item),
                     "reason": "stock o costo medio non valorizzato",
-                    "stock": parse_float(item.get("stock")),
-                    "weighted_average_cost": parse_float(
-                        item.get("weighted_average_cost", item.get("cost_per_unit"))
-                    ),
+                    "stock": stock,
+                    "weighted_average_cost": unit_cost,
                     "badge": item.get("inventory_badge", "da verificare"),
                 })
 
-            qty = parse_float(row.get("qty", row.get("quantity", 1)))
-            row["unit_cost"] = parse_float(
-                item.get("weighted_average_cost", item.get("cost_per_unit"))
-            )
-            row["cost"] = qty * row["unit_cost"]
+            if stock > 0 and qty > stock:
+                blocked.append({
+                    "name": display_name_from_key(key, item),
+                    "reason": "stock insufficiente",
+                    "stock": stock,
+                    "weighted_average_cost": unit_cost,
+                    "badge": "stock insufficiente",
+                })
+
+            row["unit_cost"] = unit_cost
+            row["cost_per_unit"] = unit_cost
+            row["weighted_average_cost"] = unit_cost
+            row["cost"] = qty * unit_cost
+            row.setdefault("label", display_name_from_key(key, item))
+        else:
+            manual_cost = parse_float(row.get("cost"))
+            if manual_cost <= 0:
+                blocked.append({
+                    "name": row.get("label") or row_name or "Riga senza nome",
+                    "reason": "materiale non trovato e costo non valorizzato",
+                    "stock": 0,
+                    "weighted_average_cost": 0,
+                    "badge": "da verificare",
+                })
 
         checked_rows.append(row)
 
     if blocked:
         names = ", ".join([x["name"] for x in blocked[:5]])
         raise ValueError(
-            "Non puoi usare nei preventivi articoli con stock 0 o costo medio 0. "
+            "Non puoi usare nei preventivi articoli con stock 0, costo medio 0 o stock insufficiente. "
             f"Articoli da verificare: {names}"
         )
 
@@ -984,7 +1033,9 @@ def calculate_quote(db, payload):
 
     return {
         "real": round(base, 2),
+        "real_cost": round(base, 2),
         "min": round(min_price, 2),
+        "min_price": round(min_price, 2),
         "recommended": round(recommended, 2),
         "discounted": round(discounted, 2),
         "premium": round(premium, 2),
