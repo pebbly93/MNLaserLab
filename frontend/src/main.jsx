@@ -2018,8 +2018,8 @@ function Setup({ toast }) {
   };
 
   return <>
-    <CatalogAdvancedSettings toast={toast} refreshTax={refreshTax} refreshSug={refreshSug} />
     <PageTitle title="Catalogo" desc="Gestisci aree, categorie, sottocategorie e configurazioni collegate." />
+    <CatalogAdvancedSettings toast={toast} refreshTax={refreshTax} refreshSug={refreshSug} />
 
     <Card title="Gestione catalogo" icon={Settings2} >
       <div className="catalog-topbar">

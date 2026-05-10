@@ -5363,3 +5363,32 @@ input[type="submit"] {
     flex-wrap: wrap;
   }
 }
+
+
+/* v41.1.1 categories layout order */
+.catalog-advanced-panel {
+  margin-top: 18px;
+  margin-bottom: 22px;
+}
+
+/* Evita che le nuove card sembrino parte dell'header pagina */
+.catalog-advanced-panel > .card {
+  min-height: auto;
+}
+
+/* La pagina Catalogo deve avere un flusso verticale chiaro:
+   1 titolo, 2 strumenti avanzati, 3 gestione catalogo */
+.catalog-advanced-panel + .split-main,
+.catalog-advanced-panel + .catalog-board,
+.catalog-advanced-panel + .catalog-grid,
+.catalog-advanced-panel + .setup-catalog-grid {
+  margin-top: 4px;
+}
+
+/* Su mobile le card avanzate devono stare compatte sotto il titolo */
+@media (max-width: 820px) {
+  .catalog-advanced-panel {
+    margin-top: 14px;
+    margin-bottom: 16px;
+  }
+}
