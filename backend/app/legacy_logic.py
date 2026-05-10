@@ -1477,18 +1477,6 @@ def create_basic_material_presets(db):
     return {"created": created, "updated": updated}
 
 
-def backup_database(suffix="backup"):
-    source = db_path()
-    if not source.exists(): return ""
-    dest = user_data_dir() / f"mn_laser_lab_{suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-    shutil.copy2(source, dest)
-    return str(dest)
-
-
-# ---------------------------------------------------------------------------
-# Workflow avanzato v39.5 - Preventivi, impostazioni, ricerca globale, dettagli
-# ---------------------------------------------------------------------------
-
 def default_business_settings():
     return {
         "hourly_rate": 20.0,
@@ -2568,6 +2556,51 @@ def backup_database_named(name="manuale"):
     return backup_database(safe)
 
 
+
+
+# ---------------------------------------------------------------------------
+# v40.3.1 - SQLite WAL safe backup/restore
+# ---------------------------------------------------------------------------
+
+def sqlite_checkpoint():
+    """Forza SQLite a scrivere il WAL nel file .db principale."""
+    try:
+        with connect() as conn:
+            conn.execute("PRAGMA wal_checkpoint(FULL)")
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception:
+        pass
+
+
+def sqlite_sidecar_paths(path):
+    p = Path(path)
+    return [
+        Path(str(p) + "-wal"),
+        Path(str(p) + "-shm"),
+    ]
+
+
+def remove_sqlite_sidecars(path):
+    for p in sqlite_sidecar_paths(path):
+        try:
+            if p.exists():
+                p.unlink()
+        except Exception:
+            pass
+
+
+def backup_database(suffix="backup"):
+    sqlite_checkpoint()
+
+    source = db_path()
+    if not source.exists():
+        return ""
+
+    dest = user_data_dir() / f"mn_laser_lab_{suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    shutil.copy2(source, dest)
+    return str(dest)
+
+
 def restore_database_from_backup(filename):
     filename = str(filename or "").strip()
     if not filename:
@@ -2579,17 +2612,36 @@ def restore_database_from_backup(filename):
     if not source.exists() or source.suffix.lower() != ".db":
         raise ValueError("Backup non trovato")
 
+    sqlite_checkpoint()
+
     # Backup di sicurezza prima del ripristino.
     safety = backup_database("prima_ripristino")
 
     target = db_path()
 
-    # Chiude eventuali connessioni indirette creando una copia atomica semplice.
+    # Fondamentale con journal_mode=WAL:
+    # rimuove i file sidecar vecchi, altrimenti SQLite può leggere dati non ripristinati.
+    remove_sqlite_sidecars(target)
+
     shutil.copy2(source, target)
+
+    # Dopo la copia, elimina eventuali sidecar generati prima della prossima apertura.
+    remove_sqlite_sidecars(target)
+
+    # Riapre e normalizza il db ripristinato.
+    restored_data = load_db()
+    save_db(restored_data)
 
     return {
         "ok": True,
         "restored": str(source),
         "safety_backup": safety,
         "db_path": str(target),
+        "items": {
+            "materials": len(restored_data.get("materials", {})),
+            "components": len(restored_data.get("components", {})),
+            "products": len(restored_data.get("products", {})),
+            "sales": len(restored_data.get("sales", [])),
+            "quotes": len(restored_data.get("quotes", [])),
+        }
     }
