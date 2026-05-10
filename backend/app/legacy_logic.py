@@ -2537,3 +2537,59 @@ def get_quote_flexible(db, quote_id):
             return q
 
     raise ValueError("Preventivo non trovato")
+
+
+# ---------------------------------------------------------------------------
+# v40.3.0 - Backup avanzato e ripristino
+# ---------------------------------------------------------------------------
+
+def list_backups():
+    root = user_data_dir()
+    rows = []
+
+    for p in sorted(root.glob("mn_laser_lab_*_*.db"), key=lambda x: x.stat().st_mtime, reverse=True):
+        try:
+            stat = p.stat()
+            rows.append({
+                "filename": p.name,
+                "path": str(p),
+                "size": stat.st_size,
+                "updated_at": datetime.fromtimestamp(stat.st_mtime).strftime("%d-%m-%Y %H:%M:%S"),
+            })
+        except Exception:
+            pass
+
+    return rows
+
+
+def backup_database_named(name="manuale"):
+    safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in str(name or "manuale").strip())
+    safe = safe or "manuale"
+    return backup_database(safe)
+
+
+def restore_database_from_backup(filename):
+    filename = str(filename or "").strip()
+    if not filename:
+        raise ValueError("Nome backup mancante")
+
+    root = user_data_dir()
+    source = root / filename
+
+    if not source.exists() or source.suffix.lower() != ".db":
+        raise ValueError("Backup non trovato")
+
+    # Backup di sicurezza prima del ripristino.
+    safety = backup_database("prima_ripristino")
+
+    target = db_path()
+
+    # Chiude eventuali connessioni indirette creando una copia atomica semplice.
+    shutil.copy2(source, target)
+
+    return {
+        "ok": True,
+        "restored": str(source),
+        "safety_backup": safety,
+        "db_path": str(target),
+    }

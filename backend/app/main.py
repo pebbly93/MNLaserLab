@@ -763,3 +763,23 @@ def quote_internal_pdf_query_api(id: str):
         return HTMLResponse(quote_internal_html(db, quote.get("id", id)))
     except ValueError as exc:
         raise HTTPException(404, str(exc))
+
+
+@app.get("/api/maintenance/backups")
+def maintenance_backups():
+    return {"backups": list_backups()}
+
+
+@app.post("/api/maintenance/backup-named")
+def backup_named(payload: Payload):
+    name = payload.data.get("name") or "manuale"
+    return {"backup": backup_database_named(name), "backups": list_backups()}
+
+
+@app.post("/api/maintenance/restore")
+def restore_backup(payload: Payload):
+    try:
+        filename = payload.data.get("filename") or ""
+        return restore_database_from_backup(filename)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))

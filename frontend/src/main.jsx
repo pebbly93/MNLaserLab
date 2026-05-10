@@ -2147,52 +2147,159 @@ function SettingsPage({ toast }) {
   const [info, setInfo] = useState({});
   const [msg, setMsg] = useState('');
   const [importText, setImportText] = useState('');
-  const [biz, setBiz] = useState({});
+  const [backupName, setBackupName] = useState('backup manuale');
+  const [backups, setBackups] = useState([]);
 
-  async function loadBusiness() {
+  async function loadInfo() {
     try {
-      setBiz(await getJSON('/settings/business'));
-    } catch (e) {}
+      setInfo(await getJSON('/maintenance/info'));
+    } catch(e) {
+      setMsg(e.message || String(e));
+    }
   }
-  async function loadInfo() { try { setInfo(await getJSON('/maintenance/info')); } catch(e) { setMsg(e.message || String(e)); } }
-  useEffect(() => { loadInfo(); loadBusiness(); }, []);
-  async function backup() { try { const r = await postJSON('/maintenance/backup', {}); setMsg(r.backup || 'Backup creato'); toast('Backup creato'); await loadInfo(); } catch(e) { toast(e.message, 'err'); } }
-  async function cleanup() { try { const r = await postJSON('/maintenance/cleanup', {}); setMsg(r.backup || 'Pulizia completata'); toast('Pulizia completata'); await loadInfo(); } catch(e) { toast(e.message, 'err'); } }
-  async function resetDb() { if (!confirm('Vuoi davvero svuotare l’archivio? Verrà creato un backup prima del reset.')) return; try { const r = await postJSON('/maintenance/reset', {}); setMsg(r.backup || 'Archivio resettato'); toast('Archivio resettato'); await loadInfo(); } catch(e) { toast(e.message, 'err'); } }
-  async function exportDb() { try { const r = await getJSON('/maintenance/export'); downloadJson(r.filename || 'mn_laser_lab_export.json', r.data || {}); toast('Export JSON scaricato'); } catch(e) { toast(e.message, 'err'); } }
-  async function importDb() { try { const parsed = JSON.parse(importText); await postJSON('/maintenance/import', { data: parsed }); setImportText(''); toast('Archivio importato'); await loadInfo(); } catch(e) { toast('JSON non valido o import non riuscito: ' + (e.message || e), 'err'); } }
-  async function saveBusiness() { try { await postJSON('/settings/business', biz); await loadBusiness(); toast('Impostazioni economiche salvate'); } catch(e) { toast(e.message, 'err'); } }
+
+  async function loadBackups() {
+    try {
+      const r = await getJSON('/maintenance/backups');
+      setBackups(list(r.backups));
+    } catch(e) {
+      toast(e.message || String(e), 'err');
+    }
+  }
+
+  useEffect(() => {
+    loadInfo();
+    loadBackups();
+  }, []);
+
+  async function backup() {
+    try {
+      const r = await postJSON('/maintenance/backup-named', { name: backupName || 'manuale' });
+      setMsg(r.backup || 'Backup creato');
+      toast('Backup creato');
+      await loadInfo();
+      await loadBackups();
+    } catch(e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function cleanup() {
+    try {
+      const r = await postJSON('/maintenance/cleanup', {});
+      setMsg(r.backup || 'Pulizia completata');
+      toast('Pulizia completata');
+      await loadInfo();
+      await loadBackups();
+    } catch(e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function resetDb() {
+    if (!confirm('Vuoi davvero svuotare l’archivio? Verrà creato un backup prima del reset.')) return;
+
+    try {
+      const r = await postJSON('/maintenance/reset', {});
+      setMsg(r.backup || 'Archivio resettato');
+      toast('Archivio resettato');
+      await loadInfo();
+      await loadBackups();
+    } catch(e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function exportDb() {
+    try {
+      const r = await getJSON('/maintenance/export');
+      downloadJson(r.filename || 'mn_laser_lab_export.json', r.data || {});
+      toast('Export JSON scaricato');
+    } catch(e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function importDb() {
+    try {
+      const parsed = JSON.parse(importText);
+      await postJSON('/maintenance/import', { data: parsed });
+      setImportText('');
+      toast('Archivio importato');
+      await loadInfo();
+      await loadBackups();
+    } catch(e) {
+      toast('JSON non valido o import non riuscito: ' + (e.message || e), 'err');
+    }
+  }
+
+  async function restoreBackup(filename) {
+    if (!confirm(`Ripristinare il backup "${filename}"? Verrà creato un backup di sicurezza prima del ripristino.`)) return;
+
+    try {
+      const r = await postJSON('/maintenance/restore', { filename });
+      setMsg(`Ripristinato: ${r.restored}\nBackup sicurezza: ${r.safety_backup}`);
+      toast('Backup ripristinato. Ricarica l’app per vedere i dati aggiornati.');
+      await loadInfo();
+      await loadBackups();
+    } catch(e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  function backupSize(bytes) {
+    const n = Number(bytes || 0);
+    if (n > 1024 * 1024) return `${(n / 1024 / 1024).toFixed(2)} MB`;
+    if (n > 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${n} B`;
+  }
+
   return <>
-    <PageTitle title="Impostazioni" desc="Gestione professionale dell’archivio: backup, export, import, pulizia e reset controllato." />
-    <Card title="Impostazioni economiche" icon={Settings2} sub="Valori standard usati nei preventivi: tariffa, margine, commissioni e costi ricorrenti." action={<button className="primary" onClick={saveBusiness}><Save /> Salva impostazioni</button>}>
-      <div className="form-grid small-grid">
-        <Input label="Tariffa oraria €/h" type="number" step="0.01" value={biz.hourly_rate ?? ''} onChange={e => setBiz({ ...biz, hourly_rate: e.target.value })} />
-        <Input label="Margine standard %" type="number" step="0.01" value={biz.default_margin ?? ''} onChange={e => setBiz({ ...biz, default_margin: e.target.value })} />
-        <Input label="Commissione standard %" type="number" step="0.01" value={biz.default_commission ?? ''} onChange={e => setBiz({ ...biz, default_commission: e.target.value })} />
-        <Input label="Sconto standard %" type="number" step="0.01" value={biz.default_discount ?? ''} onChange={e => setBiz({ ...biz, default_discount: e.target.value })} />
-        <Input label="Imballaggio €" type="number" step="0.01" value={biz.default_packaging ?? ''} onChange={e => setBiz({ ...biz, default_packaging: e.target.value })} />
-        <Input label="Energia €" type="number" step="0.01" value={biz.default_energy ?? ''} onChange={e => setBiz({ ...biz, default_energy: e.target.value })} />
-        <Input label="Usura laser €" type="number" step="0.01" value={biz.default_wear ?? ''} onChange={e => setBiz({ ...biz, default_wear: e.target.value })} />
-        <Input label="Validità preventivo giorni" type="number" step="1" value={biz.quote_validity_days ?? ''} onChange={e => setBiz({ ...biz, quote_validity_days: e.target.value })} />
-      </div>
-    </Card>
+    <PageTitle title="Impostazioni" desc="Backup, ripristino, export, import e manutenzione dell’archivio." />
+
     <div className="settings-grid">
-      <Card title="Stato archivio" icon={ShieldCheck} sub="Percorsi e stato del database locale usato dall’app.">
-        <div className="settings-info"><span>Database</span><b>{info.db_path || '—'}</b><span>Cartella dati</span><b>{info.data_dir || '—'}</b><span>Ultimo controllo</span><b>{info.checked_at || '—'}</b></div>
+      <Card title="Stato archivio" icon={ShieldCheck}>
+        <div className="settings-info">
+          <span>Database</span><b>{info.db_path || '—'}</b>
+          <span>Cartella dati</span><b>{info.data_dir || '—'}</b>
+          <span>Ultimo controllo</span><b>{info.checked_at || '—'}</b>
+        </div>
       </Card>
-      <Card title="Azioni rapide" icon={Database} sub="Prima di operazioni importanti crea sempre un backup.">
-        <div className="settings-actions">
-          <button onClick={backup}><Archive /> Backup database</button>
+
+      <Card title="Backup manuale" icon={Archive}>
+        <div className="backup-create-row">
+          <Input label="Nome backup" value={backupName} onChange={e => setBackupName(e.target.value)} />
+          <button className="primary" onClick={backup}><Archive /> Crea backup</button>
+        </div>
+
+        <div className="settings-actions compact">
           <button onClick={exportDb}><Download /> Esporta JSON</button>
           <button onClick={cleanup}><RefreshCcw /> Ripulisci archivio</button>
           <button className="danger" onClick={resetDb}><Trash2 /> Reset archivio</button>
         </div>
+
         {msg && <pre>{msg}</pre>}
       </Card>
     </div>
-    <Card title="Import archivio" icon={Upload} sub="Incolla un file JSON esportato da questa app o lo stato compatibile della versione precedente.">
+
+    <Card title="Backup disponibili" icon={Database} action={<button className="ghost" onClick={loadBackups}><RefreshCcw /> Aggiorna</button>}>
+      <div className="backup-list">
+        {backups.length ? backups.map(b => <div key={b.filename} className="backup-row">
+          <div>
+            <b>{b.filename}</b>
+            <small>{b.updated_at} · {backupSize(b.size)}</small>
+          </div>
+          <button className="ghost" onClick={() => restoreBackup(b.filename)}>Ripristina</button>
+        </div>) : <Empty text="Nessun backup trovato" />}
+      </div>
+    </Card>
+
+    <Card title="Import archivio JSON" icon={Upload}>
       <textarea className="import-box" value={importText} onChange={e=>setImportText(e.target.value)} placeholder="Incolla qui il JSON da importare..." />
-      <div className="quick-actions"><button className="primary" onClick={importDb}><FileJson /> Importa dati</button><button className="ghost" onClick={()=>setImportText('')}>Svuota campo</button></div>
+      <div className="quick-actions">
+        <button className="primary" onClick={importDb}><FileJson /> Importa dati</button>
+        <button className="ghost" onClick={()=>setImportText('')}>Svuota campo</button>
+      </div>
     </Card>
   </>;
 }

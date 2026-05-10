@@ -3614,3 +3614,60 @@ select {
     flex-direction: column;
   }
 }
+
+
+/* v40.3 advanced backup */
+.backup-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.settings-actions.compact {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.backup-list {
+  display: grid;
+  gap: 10px;
+}
+
+.backup-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(255,255,255,.045);
+  border-radius: 18px;
+  padding: 13px 14px;
+}
+
+.backup-row b,
+.backup-row small {
+  display: block;
+  min-width: 0;
+}
+
+.backup-row b {
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-row small {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .backup-create-row,
+  .backup-row {
+    grid-template-columns: 1fr;
+  }
+}
