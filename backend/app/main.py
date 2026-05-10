@@ -797,3 +797,22 @@ def import_purchases_api(payload: Payload):
 @app.get("/api/operations")
 def operations_api():
     return operational_dashboard(load_db())
+
+
+@app.get("/api/quotes/workflow")
+def quote_workflow_api():
+    return quote_workflow_summary(load_db())
+
+
+@app.post("/api/quotes/{quote_id:path}/status")
+def quote_status_api(quote_id: str, payload: Payload):
+    def fn(db):
+        return update_quote_status(db, quote_id, payload.data.get("status"))
+    return mutate(fn)
+
+
+@app.post("/api/quotes/{quote_id:path}/duplicate")
+def quote_duplicate_api(quote_id: str, payload: Payload):
+    def fn(db):
+        return duplicate_quote(db, quote_id, payload.data.get("name", ""))
+    return mutate(fn)

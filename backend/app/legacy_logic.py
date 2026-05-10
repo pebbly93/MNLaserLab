@@ -2831,3 +2831,110 @@ def operational_dashboard(db):
         "quotes": quote_rows[:10],
         "quote_stats": quote_stats,
     }
+
+
+# ---------------------------------------------------------------------------
+# v40.6.0 - Workflow preventivi avanzato
+# ---------------------------------------------------------------------------
+
+QUOTE_STATUSES = [
+    "bozza",
+    "inviato",
+    "da_modificare",
+    "accettato",
+    "in_produzione",
+    "consegnato",
+    "rifiutato",
+    "scaduto",
+]
+
+
+def normalize_quote_status(status):
+    status = str(status or "bozza").strip().lower().replace(" ", "_")
+    aliases = {
+        "draft": "bozza",
+        "sent": "inviato",
+        "accepted": "accettato",
+        "rejected": "rifiutato",
+        "production": "in_produzione",
+        "delivered": "consegnato",
+    }
+    status = aliases.get(status, status)
+    return status if status in QUOTE_STATUSES else "bozza"
+
+
+def quote_workflow_summary(db):
+    quotes = db.get("quotes", []) or []
+    counts = {s: 0 for s in QUOTE_STATUSES}
+
+    rows = []
+    for q in quotes:
+        if not isinstance(q, dict):
+            continue
+
+        status = normalize_quote_status(q.get("status"))
+        q["status"] = status
+        counts[status] = counts.get(status, 0) + 1
+
+        rows.append({
+            "id": q.get("id", ""),
+            "name": q.get("name", ""),
+            "customer": q.get("customer", ""),
+            "status": status,
+            "date": q.get("date", ""),
+            "total": q.get("discounted") or q.get("recommended") or q.get("total") or q.get("unit_price") or 0,
+            "margin": q.get("margin_total", 0),
+        })
+
+    return {
+        "statuses": QUOTE_STATUSES,
+        "counts": counts,
+        "quotes": rows,
+    }
+
+
+def update_quote_status(db, quote_id, status):
+    status = normalize_quote_status(status)
+    quote = get_quote_flexible(db, quote_id)
+
+    quote["status"] = status
+    quote["status_updated_at"] = now_str()
+
+    quote.setdefault("history", []).append({
+        "date": now_str(),
+        "event": "Cambio stato",
+        "status": status,
+    })
+
+    return {
+        "ok": True,
+        "id": quote.get("id", quote_id),
+        "status": status,
+    }
+
+
+def duplicate_quote(db, quote_id, name=""):
+    quote = get_quote_flexible(db, quote_id)
+    quotes = db.setdefault("quotes", [])
+
+    new_quote = copy.deepcopy(quote)
+    new_id = f"Q{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    new_quote["id"] = new_id
+    new_quote["name"] = (name or f"{quote.get('name', 'Preventivo')} - copia").strip()
+    new_quote["status"] = "bozza"
+    new_quote["date"] = today_str()
+    new_quote["created_at"] = now_str()
+    new_quote["status_updated_at"] = now_str()
+    new_quote["history"] = [{
+        "date": now_str(),
+        "event": "Duplicato da preventivo",
+        "source_id": quote.get("id", quote_id),
+        "status": "bozza",
+    }]
+
+    quotes.append(new_quote)
+
+    return {
+        "ok": True,
+        "quote": new_quote,
+    }

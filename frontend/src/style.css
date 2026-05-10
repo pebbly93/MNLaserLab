@@ -3945,3 +3945,131 @@ select {
     width: fit-content;
   }
 }
+
+
+/* v40.6 quote workflow */
+.quote-workflow-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.quote-status-filter {
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(255,255,255,.045);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 11px 12px;
+  display: grid;
+  gap: 5px;
+  text-align: left;
+}
+
+.quote-status-filter span {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.quote-status-filter b {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.quote-workflow-list {
+  display: grid;
+  gap: 10px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.quote-workflow-row {
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(255,255,255,.045);
+  border-radius: 18px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto minmax(320px, auto);
+  gap: 12px;
+  align-items: center;
+}
+
+.quote-workflow-row b,
+.quote-workflow-row small {
+  display: block;
+  min-width: 0;
+}
+
+.quote-workflow-row b {
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quote-workflow-row small {
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.quote-status-pill {
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+  background: rgba(148, 163, 184, .12);
+  color: var(--muted);
+}
+
+.quote-status-pill.bozza { background: rgba(148, 163, 184, .14); color: #cbd5e1; }
+.quote-status-pill.inviato { background: rgba(59, 130, 246, .16); color: #bfdbfe; }
+.quote-status-pill.da_modificare { background: rgba(245, 158, 11, .16); color: #fde68a; }
+.quote-status-pill.accettato { background: rgba(34, 197, 94, .16); color: #bbf7d0; }
+.quote-status-pill.in_produzione { background: rgba(34, 211, 238, .16); color: #a5f3fc; }
+.quote-status-pill.consegnato { background: rgba(16, 185, 129, .18); color: #a7f3d0; }
+.quote-status-pill.rifiutato { background: rgba(239, 68, 68, .16); color: #fecaca; }
+.quote-status-pill.scaduto { background: rgba(100, 116, 139, .22); color: #cbd5e1; }
+
+.quote-workflow-actions {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.quote-workflow-actions select {
+  width: 145px;
+  min-height: 36px !important;
+  height: 36px !important;
+}
+
+.quote-workflow-actions button {
+  min-height: 36px;
+  padding: 7px 10px;
+}
+
+@media (max-width: 1200px) {
+  .quote-workflow-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .quote-workflow-actions {
+    justify-content: flex-start;
+  }
+
+  .quote-workflow-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .quote-workflow-stats {
+    grid-template-columns: 1fr;
+  }
+}

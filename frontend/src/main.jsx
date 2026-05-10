@@ -10,6 +10,19 @@ import { getJSON, postJSON, del } from './api';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import './style.css';
 
+const quoteStatusLabels = {
+  bozza: 'Bozza',
+  inviato: 'Inviato',
+  da_modificare: 'Da modificare',
+  accettato: 'Accettato',
+  in_produzione: 'In produzione',
+  consegnato: 'Consegnato',
+  rifiutato: 'Rifiutato',
+  scaduto: 'Scaduto',
+};
+
+const quoteStatusFlow = ['bozza', 'inviato', 'da_modificare', 'accettato', 'in_produzione', 'consegnato', 'rifiutato', 'scaduto'];
+
 const money = n => `€ ${Number(n || 0).toFixed(2)}`;
 const num = n => Number(n || 0).toFixed(2);
 const list = v => Array.isArray(v) ? v : [];
@@ -1301,6 +1314,7 @@ function Products({ toast }) {
 function Quote({ toast }) {
   const { data: inv } = useApi('/inventory', []);
   const { data: sug } = useApi('/suggestions', {});
+  const { data: workflow, refresh: workflowRefresh } = useApi('/quotes/workflow', { statuses: quoteStatusFlow, counts: {}, quotes: [] });
   const { data: business } = useApi('/settings/business', {});
   const { data: savedQuotes, refresh: refreshQuotes } = useApi('/quotes', []);
   const [rows, setRows] = useState([]);
