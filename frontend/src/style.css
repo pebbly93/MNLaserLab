@@ -4073,3 +4073,125 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* v40.7 pdf settings */
+.pdf-settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.pdf-settings-form {
+  display: grid;
+  gap: 14px;
+}
+
+.pdf-settings-form textarea {
+  min-height: 82px;
+}
+
+.pdf-settings-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.pdf-preview-page {
+  background: #fff;
+  color: #0f172a;
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.24);
+  display: grid;
+  gap: 14px;
+}
+
+.pdf-preview-head {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  border-bottom: 3px solid #058482;
+  padding-bottom: 14px;
+}
+
+.pdf-preview-logo {
+  width: 82px;
+  height: 58px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.pdf-preview-logo img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.pdf-preview-head h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.pdf-preview-head p {
+  margin: 2px 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.pdf-preview-page h4 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.pdf-preview-intro,
+.pdf-preview-terms {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 12px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.pdf-preview-table {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.pdf-preview-table span,
+.pdf-preview-table b {
+  padding: 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.pdf-preview-table span {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.pdf-preview-page small {
+  color: #64748b;
+  text-align: center;
+}
+
+.import-box.small {
+  min-height: 120px;
+}
+
+@media (max-width: 1050px) {
+  .pdf-settings-layout {
+    grid-template-columns: 1fr;
+  }
+}

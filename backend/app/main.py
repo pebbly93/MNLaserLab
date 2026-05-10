@@ -816,3 +816,27 @@ def quote_duplicate_api(quote_id: str, payload: Payload):
     def fn(db):
         return duplicate_quote(db, quote_id, payload.data.get("name", ""))
     return mutate(fn)
+
+
+@app.get("/api/settings/pdf")
+def get_pdf_settings_api():
+    return get_pdf_settings(load_db())
+
+
+@app.post("/api/settings/pdf")
+def update_pdf_settings_api(payload: Payload):
+    def fn(db):
+        return update_pdf_settings(db, payload.data)
+    return mutate(fn)
+
+
+@app.get("/api/settings/pdf/export")
+def export_pdf_settings_api():
+    return export_pdf_settings(load_db())
+
+
+@app.post("/api/settings/pdf/import")
+def import_pdf_settings_api(payload: Payload):
+    def fn(db):
+        return import_pdf_settings(db, payload.data)
+    return mutate(fn)

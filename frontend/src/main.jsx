@@ -2276,6 +2276,124 @@ function downloadJson(filename, data) {
   URL.revokeObjectURL(url);
 }
 
+
+function PdfSettingsPanel({ toast }) {
+  const { data: pdfSettings, refresh: refreshPdfSettings } = useApi('/settings/pdf', {});
+  const [pdfForm, setPdfForm] = useState({});
+  const [importModelText, setImportModelText] = useState('');
+
+  useEffect(() => {
+    setPdfForm(pdfSettings || {});
+  }, [JSON.stringify(pdfSettings || {})]);
+
+  function setPdf(key, value) {
+    setPdfForm(v => ({ ...v, [key]: value }));
+  }
+
+  async function savePdfSettings() {
+    try {
+      await postJSON('/settings/pdf', pdfForm);
+      toast('Modello PDF salvato');
+      await refreshPdfSettings();
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function exportPdfModel() {
+    try {
+      const r = await getJSON('/settings/pdf/export');
+      downloadJson(r.filename || 'mn_laser_lab_pdf_template.json', r.data || {});
+      toast('Modello PDF esportato');
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function importPdfModel() {
+    try {
+      const parsed = JSON.parse(importModelText);
+      await postJSON('/settings/pdf/import', parsed);
+      setImportModelText('');
+      toast('Modello PDF importato');
+      await refreshPdfSettings();
+    } catch (e) {
+      toast('Modello non valido: ' + (e.message || e), 'err');
+    }
+  }
+
+  return <Card title="Modello PDF e dati azienda" icon={FileJson} action={<button className="primary" onClick={savePdfSettings}><Save /> Salva modello PDF</button>}>
+    <div className="pdf-settings-layout">
+      <div className="pdf-settings-form">
+        <div className="form-grid">
+          <Input label="Nome attività" value={pdfForm.company_name || ''} onChange={e => setPdf('company_name', e.target.value)} />
+          <Input label="Autore / titolare" value={pdfForm.author || ''} onChange={e => setPdf('author', e.target.value)} />
+          <Input label="Email" value={pdfForm.email || ''} onChange={e => setPdf('email', e.target.value)} />
+          <Input label="Telefono" value={pdfForm.phone || ''} onChange={e => setPdf('phone', e.target.value)} />
+          <Input label="Indirizzo" value={pdfForm.address || ''} onChange={e => setPdf('address', e.target.value)} />
+          <Input label="Sito web" value={pdfForm.website || ''} onChange={e => setPdf('website', e.target.value)} />
+          <Input label="P.IVA / CF" value={pdfForm.vat || ''} onChange={e => setPdf('vat', e.target.value)} />
+          <Input label="Colore principale" value={pdfForm.primary_color || '#058482'} onChange={e => setPdf('primary_color', e.target.value)} />
+        </div>
+
+        <div className="form-grid">
+          <Input label="Titolo PDF cliente" value={pdfForm.customer_title || ''} onChange={e => setPdf('customer_title', e.target.value)} />
+          <Input label="Titolo PDF interno" value={pdfForm.internal_title || ''} onChange={e => setPdf('internal_title', e.target.value)} />
+        </div>
+
+        <Field label="Testo introduttivo">
+          <textarea value={pdfForm.intro_text || ''} onChange={e => setPdf('intro_text', e.target.value)} />
+        </Field>
+
+        <Field label="Condizioni commerciali">
+          <textarea value={pdfForm.terms || ''} onChange={e => setPdf('terms', e.target.value)} />
+        </Field>
+
+        <Field label="Footer PDF">
+          <textarea value={pdfForm.footer || ''} onChange={e => setPdf('footer', e.target.value)} />
+        </Field>
+
+        <Field label="Logo Base64 / Data URL">
+          <textarea value={pdfForm.logo_data_url || ''} onChange={e => setPdf('logo_data_url', e.target.value)} placeholder="data:image/png;base64,..." />
+        </Field>
+      </div>
+
+      <div className="pdf-settings-preview">
+        <div className="pdf-preview-page">
+          <div className="pdf-preview-head" style={{ borderColor: pdfForm.primary_color || '#058482' }}>
+            <div className="pdf-preview-logo">
+              {pdfForm.logo_data_url ? <img src={pdfForm.logo_data_url} alt="Logo" /> : <span>Logo</span>}
+            </div>
+            <div>
+              <h3>{pdfForm.company_name || 'MN Laser Lab'}</h3>
+              <p>{pdfForm.author || 'Filippo Lolli'}</p>
+              <p>{pdfForm.email || 'filippololli1@gmail.com'}</p>
+            </div>
+          </div>
+          <h4>{pdfForm.customer_title || 'Preventivo cliente'}</h4>
+          <p className="pdf-preview-intro">{pdfForm.intro_text || 'Testo introduttivo del preventivo.'}</p>
+          <div className="pdf-preview-table">
+            <span>Descrizione</span><span>Totale</span>
+            <b>Creazione personalizzata</b><b>€ 120.00</b>
+          </div>
+          <p className="pdf-preview-terms">{pdfForm.terms || 'Condizioni commerciali.'}</p>
+          <small>{pdfForm.footer || 'Footer PDF'}</small>
+        </div>
+
+        <div className="quick-actions">
+          <button className="ghost" onClick={exportPdfModel}><Download /> Esporta modello</button>
+        </div>
+
+        <textarea className="import-box small" value={importModelText} onChange={e => setImportModelText(e.target.value)} placeholder="Incolla qui il JSON del modello PDF..." />
+        <div className="quick-actions">
+          <button className="primary" onClick={importPdfModel}><Upload /> Importa modello</button>
+          <button className="ghost" onClick={() => setImportModelText('')}>Svuota</button>
+        </div>
+      </div>
+    </div>
+  </Card>;
+}
+
 function SettingsPage({ toast }) {
   const [info, setInfo] = useState({});
   const [msg, setMsg] = useState('');
@@ -2496,6 +2614,8 @@ function SettingsPage({ toast }) {
         </div>
       </div>
     </Card>
+
+    <PdfSettingsPanel toast={toast} />
 
     <Card title="Import archivio JSON" icon={Upload}>
       <textarea className="import-box" value={importText} onChange={e=>setImportText(e.target.value)} placeholder="Incolla qui il JSON da importare..." />

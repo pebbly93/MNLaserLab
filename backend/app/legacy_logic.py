@@ -2938,3 +2938,139 @@ def duplicate_quote(db, quote_id, name=""):
         "ok": True,
         "quote": new_quote,
     }
+
+
+# ---------------------------------------------------------------------------
+# v40.7.0 - Impostazioni modello PDF / brand
+# ---------------------------------------------------------------------------
+
+def default_pdf_settings():
+    return {
+        "company_name": "MN Laser Lab",
+        "author": "Filippo Lolli",
+        "email": "filippololli1@gmail.com",
+        "phone": "",
+        "address": "",
+        "website": "",
+        "vat": "",
+        "logo_data_url": "",
+        "primary_color": "#058482",
+        "customer_title": "Preventivo cliente",
+        "internal_title": "Scheda interna preventivo",
+        "intro_text": "Grazie per averci contattato. Di seguito trovi il riepilogo del preventivo richiesto.",
+        "terms": "Il preventivo è valido salvo disponibilità materiali e conferma finale della lavorazione.",
+        "footer": "MN Laser Lab - Creazioni artigianali in legno e taglio laser",
+    }
+
+
+def get_pdf_settings(db):
+    settings = db.setdefault("pdf_settings", {})
+    base = default_pdf_settings()
+    for k, v in base.items():
+        settings.setdefault(k, v)
+    return settings
+
+
+def update_pdf_settings(db, payload):
+    settings = get_pdf_settings(db)
+    allowed = set(default_pdf_settings().keys())
+
+    for key, value in (payload or {}).items():
+        if key in allowed:
+            settings[key] = str(value or "")
+
+    db["pdf_settings"] = settings
+    return settings
+
+
+def export_pdf_settings(db):
+    return {
+        "filename": f"mn_laser_lab_pdf_template_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+        "data": get_pdf_settings(db),
+    }
+
+
+def import_pdf_settings(db, payload):
+    if not isinstance(payload, dict):
+        raise ValueError("Modello PDF non valido")
+    return update_pdf_settings(db, payload)
+
+
+def _pdf_brand_block(db):
+    s = get_pdf_settings(db)
+    logo = s.get("logo_data_url", "")
+    logo_html = f'<img class="brand-logo" src="{logo}" alt="Logo" />' if logo else ""
+    return f"""
+    <div class="brand-head">
+      <div>
+        {logo_html}
+      </div>
+      <div class="brand-company">
+        <h1>{s.get('company_name','MN Laser Lab')}</h1>
+        <p>{s.get('author','')}</p>
+        <p>{s.get('email','')} {s.get('phone','')}</p>
+        <p>{s.get('address','')}</p>
+        <p>{s.get('website','')} {s.get('vat','')}</p>
+      </div>
+    </div>
+    """
+
+
+def _pdf_brand_css(db):
+    s = get_pdf_settings(db)
+    color = s.get("primary_color", "#058482") or "#058482"
+    return f"""
+    <style>
+      :root {{ --brand: {color}; }}
+      .brand-head {{
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        align-items: flex-start;
+        border-bottom: 3px solid var(--brand);
+        padding-bottom: 18px;
+        margin-bottom: 24px;
+      }}
+      .brand-logo {{
+        max-width: 150px;
+        max-height: 80px;
+        object-fit: contain;
+      }}
+      .brand-company {{
+        text-align: right;
+        font-size: 12px;
+        color: #475569;
+      }}
+      .brand-company h1 {{
+        margin: 0 0 6px;
+        color: #0f172a;
+        font-size: 24px;
+      }}
+      .brand-company p {{
+        margin: 2px 0;
+      }}
+      .pdf-intro {{
+        border-left: 4px solid var(--brand);
+        padding: 10px 14px;
+        background: #f8fafc;
+        margin: 18px 0;
+        color: #334155;
+      }}
+      .pdf-terms {{
+        margin-top: 28px;
+        padding: 14px;
+        background: #f8fafc;
+        border-radius: 10px;
+        color: #475569;
+        font-size: 12px;
+      }}
+      .pdf-footer {{
+        margin-top: 28px;
+        border-top: 1px solid #e2e8f0;
+        padding-top: 12px;
+        font-size: 11px;
+        color: #64748b;
+        text-align: center;
+      }}
+    </style>
+    """
