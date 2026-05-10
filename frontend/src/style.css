@@ -450,3 +450,53 @@ html[data-theme='dark'] .flow-pill-copy em{color:#9fb0c6;}
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+/* fix dropdown suggerimenti / tendine categorie */
+.field,
+.smart-field,
+.form-grid,
+.buy-grid,
+.card,
+.card header,
+.card > div {
+  overflow: visible;
+}
+
+.suggestions {
+  position: absolute;
+  z-index: 99999;
+  pointer-events: auto;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.suggestions button {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+input[list],
+input,
+select,
+textarea,
+button {
+  pointer-events: auto;
+}
+
+.buy-grid {
+  position: relative;
+  z-index: 5;
+}
+
+.buy-grid .field {
+  position: relative;
+  z-index: 10;
+}
+
+.buy-grid .field:focus-within {
+  z-index: 100000;
+}
+
+.card:has(.buy-grid) {
+  position: relative;
+  z-index: 20;
+}
