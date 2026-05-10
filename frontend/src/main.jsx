@@ -1825,6 +1825,7 @@ function CatalogAdvancedSettings({ toast, refreshSug }) {
 
 function Setup({ toast }) {
   const { data: tax, refresh: refreshTax } = useApi('/taxonomy', { raw_tree: [], product_tree: [], supplier_matrix: [] });
+  const { data: catalogAreas, refresh: refreshAreas } = useApi('/catalog/areas', []);
   const { data: sug, refresh: refreshSug } = useApi('/suggestions', {});
 
   const [mode, setMode] = useState('raw');
@@ -1839,7 +1840,7 @@ function Setup({ toast }) {
   const [typologyDraft, setTypologyDraft] = useState('');
   const [productDraft, setProductDraft] = useState({ category: '', subcategory: '', collection: '' });
 
-  const rawAreas = list(tax.raw_tree);
+  const rawAreas = list(rawTreeWithAreas);
   const activeArea = rawAreas.find(a => a.scope === selectedArea || a.label === selectedArea) || rawAreas[0] || { scope: 'materials', label: 'Falegnameria', categories: [] };
   const areaScope = activeArea.scope;
   const areaLabel = activeArea.label;
@@ -1866,8 +1867,38 @@ function Setup({ toast }) {
     return !q || q.toLowerCase().split(/\s+/).every(part => text.includes(part));
   });
 
-  async function reloadCatalog() {
+  
+  const rawTreeWithAreas = (() => {
+    const base = list(rawTreeWithAreas).map(sec => ({
+      ...sec,
+      label: sec.label || sec.name || sec.section || sec.key || '',
+      name: sec.name || sec.label || sec.section || sec.key || '',
+      categories: list(sec.categories),
+    }));
+
+    const seen = new Set(base.map(sec => String(sec.label || sec.name || '').trim()).filter(Boolean));
+
+    for (const area of list(catalogAreas)) {
+      const name = String(area || '').trim();
+      if (!name || seen.has(name)) continue;
+
+      base.push({
+        key: name,
+        label: name,
+        name,
+        section: name,
+        categories: [],
+      });
+
+      seen.add(name);
+    }
+
+    return base;
+  })();
+
+async function reloadCatalog() {
     await refreshTax();
+      refreshAreas?.();
     await refreshSug();
   }
 
