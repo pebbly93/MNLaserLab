@@ -1459,6 +1459,65 @@ function Quote({ toast }) {
     }
   }
 
+
+  async function startQuoteProduction(q) {
+    try {
+      await postJSON(`/quotes/${encodeURIComponent(q.id)}/start-production`, {});
+      toast('Preventivo avviato in produzione');
+      workflowRefresh?.();
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function markQuoteDelivered(q) {
+    if (!confirm('Segnare questo preventivo come consegnato?')) return;
+
+    try {
+      await postJSON(`/quotes/${encodeURIComponent(q.id)}/mark-delivered`, {});
+      toast('Preventivo segnato come consegnato');
+      workflowRefresh?.();
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function registerQuoteSale(q) {
+    const name = prompt('Nome vendita', q.name || 'Vendita da preventivo') || q.name || 'Vendita da preventivo';
+
+    try {
+      await postJSON(`/quotes/${encodeURIComponent(q.id)}/register-sale`, {
+        name,
+        customer: q.customer || '',
+        qty: 1,
+        unit_price: q.total || q.recommended || q.discounted || 0
+      });
+
+      toast('Vendita registrata da preventivo');
+      workflowRefresh?.();
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function createProductFromQuote(q) {
+    const name = prompt('Nome prodotto da creare', q.name || 'Prodotto da preventivo');
+
+    if (!name) return;
+
+    try {
+      await postJSON(`/quotes/${encodeURIComponent(q.id)}/to-product`, {
+        name,
+        stock: 0
+      });
+
+      toast('Prodotto creato da preventivo');
+      workflowRefresh?.();
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
   async function openQuotePdf(q, type = 'customer') {
     if (!q?.id) {
       toast('Salva prima il preventivo', 'err');
@@ -1595,6 +1654,11 @@ function Quote({ toast }) {
         { key: 'status', label: 'Stato', render: r => <span className={`quote-status ${r.status || 'draft'}`}>{r.status_label || r.status || 'bozza'}</span> },
         { key: 'value', label: 'Valore', render: r => money(r.potential_value || r.recommended || r.discounted) },
         { key: 'act', label: 'Azioni', render: r => <div className="table-actions">
+          
+          {(r.status === 'accettato' || r.status === 'in_produzione') && <button className="workflow-action production" onClick={() => startQuoteProduction(r)}>Produzione</button>}
+          {r.status === 'accettato' && <button className="workflow-action product" onClick={() => createProductFromQuote(r)}>Crea prodotto</button>}
+          {(r.status === 'accettato' || r.status === 'in_produzione') && <button className="workflow-action sale" onClick={() => registerQuoteSale(r)}>Registra vendita</button>}
+          {r.status === 'in_produzione' && <button className="workflow-action delivered" onClick={() => markQuoteDelivered(r)}>Consegnato</button>}
           <button className="ghost" onClick={() => openQuotePdf(r, 'customer')}>PDF cliente</button>
           <button className="ghost" onClick={() => openQuotePdf(r, 'internal')}>PDF interno</button>
           <button className="ghost" onClick={() => changeQuoteStatus(r, 'sent')}>Inviato</button>

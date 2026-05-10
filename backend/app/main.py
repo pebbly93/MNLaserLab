@@ -840,3 +840,24 @@ def import_pdf_settings_api(payload: Payload):
     def fn(db):
         return import_pdf_settings(db, payload.data)
     return mutate(fn)
+
+
+@app.post("/api/quotes/{quote_id:path}/start-production")
+def quote_start_production_api(quote_id: str):
+    def fn(db):
+        return quote_start_production(db, quote_id)
+    return mutate(fn)
+
+
+@app.post("/api/quotes/{quote_id:path}/register-sale")
+def quote_register_sale_api(quote_id: str, payload: Payload):
+    def fn(db):
+        return quote_register_sale(db, quote_id, payload.data)
+    return mutate(fn)
+
+
+@app.post("/api/quotes/{quote_id:path}/mark-delivered")
+def quote_mark_delivered_api(quote_id: str):
+    def fn(db):
+        return quote_mark_delivered(db, quote_id)
+    return mutate(fn)

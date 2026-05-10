@@ -3202,3 +3202,98 @@ def apply_pdf_brand_to_html(db, html, kind="customer"):
 
     return html
 
+
+
+# ---------------------------------------------------------------------------
+# v40.8.0 - Preventivo accettato → workflow prodotto/vendita
+# ---------------------------------------------------------------------------
+
+def quote_register_sale(db, quote_id, payload=None):
+    payload = payload or {}
+    quote = get_quote_flexible(db, quote_id)
+
+    name = payload.get("name") or quote.get("name") or "Vendita da preventivo"
+    customer = payload.get("customer") or quote.get("customer") or ""
+    qty = parse_float(payload.get("qty", 1)) or 1
+
+    unit_price = (
+        parse_float(payload.get("unit_price"))
+        or parse_float(quote.get("discounted"))
+        or parse_float(quote.get("recommended"))
+        or parse_float(quote.get("total"))
+        or parse_float(quote.get("unit_price"))
+    )
+
+    rows = quote.get("rows", []) or []
+    estimated_materials = quote.get("estimated_materials", []) or []
+
+    sale_payload = {
+        "name": name,
+        "customer": customer,
+        "qty": qty,
+        "unit_price": unit_price,
+        "rows": rows,
+        "estimated_materials": estimated_materials,
+        "hours": quote.get("hours", 0),
+        "rate": quote.get("rate", 0),
+        "packaging": quote.get("packaging", 0),
+        "energy": quote.get("energy", 0),
+        "wear": quote.get("wear", 0),
+        "commission": quote.get("commission", 0),
+        "margin": quote.get("margin", 0),
+        "discount": quote.get("discount", 0),
+        "source": "preventivo",
+        "quote_id": quote.get("id", quote_id),
+    }
+
+    result = record_quote_sale(db, sale_payload)
+
+    quote["status"] = "consegnato"
+    quote["status_updated_at"] = now_str()
+    quote.setdefault("history", []).append({
+        "date": now_str(),
+        "event": "Vendita registrata da preventivo",
+        "status": "consegnato",
+    })
+
+    return {
+        "ok": True,
+        "sale": result,
+        "quote_status": quote["status"],
+    }
+
+
+def quote_start_production(db, quote_id):
+    quote = get_quote_flexible(db, quote_id)
+
+    quote["status"] = "in_produzione"
+    quote["status_updated_at"] = now_str()
+    quote.setdefault("history", []).append({
+        "date": now_str(),
+        "event": "Preventivo avviato in produzione",
+        "status": "in_produzione",
+    })
+
+    return {
+        "ok": True,
+        "id": quote.get("id", quote_id),
+        "status": "in_produzione",
+    }
+
+
+def quote_mark_delivered(db, quote_id):
+    quote = get_quote_flexible(db, quote_id)
+
+    quote["status"] = "consegnato"
+    quote["status_updated_at"] = now_str()
+    quote.setdefault("history", []).append({
+        "date": now_str(),
+        "event": "Preventivo segnato come consegnato",
+        "status": "consegnato",
+    })
+
+    return {
+        "ok": True,
+        "id": quote.get("id", quote_id),
+        "status": "consegnato",
+    }
