@@ -177,6 +177,7 @@ function FlowPill({ n, title, desc, detail, icon: Icon, active }) { return <div 
 function Studio({ go }) {
   const { data: d, loading } = useApi('/dashboard', {});
   const { data: r } = useApi('/report', {});
+  const { data: alerts } = useApi('/workflow/alerts', {});
   const stats = [
     ['Magazzino', money(d.inventory_value), 'materie prime', Boxes, 'cyan'],
     ['Prodotti', d.products || 0, 'creazioni MN', Factory, 'wood'],
@@ -200,6 +201,14 @@ function Studio({ go }) {
       </Card>
       <Card title="Margine attività" icon={BarChart3} sub="Sintesi economica per capire se ciò che produci conviene davvero.">
         <div className="mini-stats"><Stat label="Raw" value={money(r.raw_total)} /><Stat label="Prodotti" value={money(r.product_total)} /><Stat label="Margine" value={money(r.margin_total)} sub={`${num(r.margin_pct)} %`} /></div>
+      </Card>
+      <Card title="Da controllare oggi" icon={AlertTriangle} sub="L'app evidenzia le attività che possono bloccare produzione, preventivi o margini.">
+        <div className="workflow-alert-grid">
+          <button onClick={() => go('materials')}><b>{alerts.materials_to_check || 0}</b><span>Materiali da verificare</span></button>
+          <button onClick={() => go('materials')}><b>{alerts.low_stock_materials || 0}</b><span>Sotto scorta</span></button>
+          <button onClick={() => go('quote')}><b>{alerts.open_quotes || 0}</b><span>Preventivi aperti</span></button>
+          <button onClick={() => go('quote')}><b>{money(alerts.potential_quotes_value)}</b><span>Valore potenziale</span></button>
+        </div>
       </Card>
     </div>
   </>;
@@ -397,13 +406,32 @@ function Products({ toast }) {
 function Quote({ toast }) {
   const { data: inv } = useApi('/inventory', []);
   const { data: sug } = useApi('/suggestions', {});
+  const { data: business } = useApi('/settings/business', {});
+  const { data: savedQuotes, refresh: refreshQuotes } = useApi('/quotes', []);
   const [rows, setRows] = useState([]);
   const [item, setItem] = useState('');
   const [qty, setQty] = useState('1');
   const [res, setRes] = useState(null);
+  const [quoteName, setQuoteName] = useState('');
+  const [quoteCustomer, setQuoteCustomer] = useState('');
+  const [quoteNotes, setQuoteNotes] = useState('');
   const [materialSearch, setMaterialSearch] = useState('');
   const [filters, setFilters] = useState({ supplier: '', section: '', category: '', subcategory: '' });
   const [cost, setCost] = useState({ hours: '', rate: '', packaging: '', energy: '', wear: '', commission: '', margin: '30', discount: '' });
+
+  useEffect(() => {
+    if (!business || Object.keys(business).length === 0) return;
+    setCost(v => ({
+      ...v,
+      rate: v.rate || business.hourly_rate || '',
+      packaging: v.packaging || business.default_packaging || '',
+      energy: v.energy || business.default_energy || '',
+      wear: v.wear || business.default_wear || '',
+      commission: v.commission || business.default_commission || '',
+      margin: v.margin || business.default_margin || '30',
+      discount: v.discount || business.default_discount || ''
+    }));
+  }, [business]);
 
   const filteredMaterials = useMemo(() => {
     const q = materialSearch.toLowerCase().trim();
@@ -464,10 +492,53 @@ function Quote({ toast }) {
 
   async function sale() {
     if (!res) return;
-    const name = prompt('Nome vendita', 'Vendita da preventivo') || 'Vendita da preventivo';
+    const name = prompt('Nome vendita', quoteName || 'Vendita da preventivo') || 'Vendita da preventivo';
     try {
-      await postJSON('/quote/sale', { name, qty: 1, unit_price: res.discounted || res.recommended, rows, estimated_materials: [], ...cost });
+      await postJSON('/quote/sale', { name, customer: quoteCustomer, qty: 1, unit_price: res.discounted || res.recommended, rows, estimated_materials: [], ...cost });
       toast('Vendita da preventivo registrata');
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function saveQuote(status = 'draft') {
+    try {
+      const payload = {
+        name: quoteName || 'Preventivo senza nome',
+        customer: quoteCustomer,
+        notes: quoteNotes,
+        status,
+        rows,
+        estimates: [],
+        estimated_materials: [],
+        ...cost
+      };
+      const saved = await postJSON('/quotes', payload);
+      setRes(saved.result || res);
+      await refreshQuotes();
+      toast(status === 'sent' ? 'Preventivo salvato come inviato' : 'Preventivo salvato');
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function quoteToProduct(q) {
+    const name = prompt('Nome prodotto da creare', q.name || 'Prodotto da preventivo');
+    if (!name) return;
+    try {
+      await postJSON(`/quotes/${encodeURIComponent(q.id)}/to-product`, { name });
+      await refreshQuotes();
+      toast('Prodotto creato dal preventivo');
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function changeQuoteStatus(q, status) {
+    try {
+      await postJSON(`/quotes/${encodeURIComponent(q.id)}/status`, { status });
+      await refreshQuotes();
+      toast('Stato preventivo aggiornato');
     } catch (e) {
       toast(e.message, 'err');
     }
@@ -479,6 +550,18 @@ function Quote({ toast }) {
 
   return <>
     <PageTitle title="Preventivi" desc="Costruisci il prezzo partendo dai materiali reali del magazzino, poi aggiungi lavoro, consumi, commissioni e margine." />
+
+    <Card title="Dati preventivo" icon={FileJson} sub="Salva bozze, invia preventivi e trasformali in prodotti finiti quando diventano ripetibili.">
+      <div className="form-grid">
+        <Input label="Nome preventivo / prodotto" value={quoteName} onChange={e => setQuoteName(e.target.value)} placeholder="Es. Orologio One Piece 40 cm" />
+        <SmartInput label="Cliente" options={sug.customers} value={quoteCustomer} onChange={e => setQuoteCustomer(e.target.value)} placeholder="Cliente o vendita diretta" />
+        <Input label="Note" value={quoteNotes} onChange={e => setQuoteNotes(e.target.value)} placeholder="Dettagli lavorazione, personalizzazione, consegna..." />
+      </div>
+      <div className="quick-actions">
+        <button onClick={() => saveQuote('draft')}><Save /> Salva bozza</button>
+        <button onClick={() => saveQuote('sent')}><ArrowRight /> Segna inviato</button>
+      </div>
+    </Card>
 
     <div className="quote-layout">
       <Card title="Ricerca rapida materiali" icon={Search} sub="Cerca nel magazzino per nome, categoria, fornitore, formato o spessore. Aggiungi i materiali al preventivo con un click.">
@@ -529,7 +612,7 @@ function Quote({ toast }) {
         <div className="form-grid small-grid">
           {Object.keys(cost).map(k => <Input key={k} label={costLabels[k] || k} type="number" step="0.01" value={cost[k]} onChange={e => setCost({ ...cost, [k]: e.target.value })} />)}
         </div>
-        {res && <div className="quick-actions"><button onClick={sale}><ShoppingCart /> Registra vendita da preventivo</button></div>}
+        {res && <div className="quick-actions"><button onClick={sale}><ShoppingCart /> Registra vendita da preventivo</button><button onClick={() => saveQuote('draft')}><Save /> Salva preventivo</button></div>}
       </Card>
       <Card title="Riepilogo rapido" icon={Gauge} sub="Il prezzo consigliato tiene conto di costi reali, commissioni e margine desiderato.">
         {res ? <div className="quote-result-grid">
@@ -541,6 +624,22 @@ function Quote({ toast }) {
         </div> : <Empty text="Calcola il preventivo" />}
       </Card>
     </div>
+
+    <Card title="Archivio preventivi" icon={FileJson} sub="Pipeline commerciale: bozze, inviati, accettati e rifiutati.">
+      <DataTable rows={list(savedQuotes)} empty="Nessun preventivo salvato" columns={[
+        { key: 'date', label: 'Data' },
+        { key: 'name', label: 'Preventivo' },
+        { key: 'customer', label: 'Cliente', render: r => r.customer || '—' },
+        { key: 'status', label: 'Stato', render: r => <span className={`quote-status ${r.status || 'draft'}`}>{r.status_label || r.status || 'bozza'}</span> },
+        { key: 'value', label: 'Valore', render: r => money(r.potential_value || r.recommended || r.discounted) },
+        { key: 'act', label: 'Azioni', render: r => <div className="table-actions">
+          <button className="ghost" onClick={() => changeQuoteStatus(r, 'sent')}>Inviato</button>
+          <button className="ghost" onClick={() => changeQuoteStatus(r, 'accepted')}>Accettato</button>
+          <button className="ghost" onClick={() => changeQuoteStatus(r, 'rejected')}>Rifiutato</button>
+          <button className="ghost" onClick={() => quoteToProduct(r)}>Crea prodotto</button>
+        </div> }
+      ]} />
+    </Card>
   </>;
 }
 
@@ -816,15 +915,35 @@ function SettingsPage({ toast }) {
   const [info, setInfo] = useState({});
   const [msg, setMsg] = useState('');
   const [importText, setImportText] = useState('');
+  const [biz, setBiz] = useState({});
+
+  async function loadBusiness() {
+    try {
+      setBiz(await getJSON('/settings/business'));
+    } catch (e) {}
+  }
   async function loadInfo() { try { setInfo(await getJSON('/maintenance/info')); } catch(e) { setMsg(e.message || String(e)); } }
-  useEffect(() => { loadInfo(); }, []);
+  useEffect(() => { loadInfo(); loadBusiness(); }, []);
   async function backup() { try { const r = await postJSON('/maintenance/backup', {}); setMsg(r.backup || 'Backup creato'); toast('Backup creato'); await loadInfo(); } catch(e) { toast(e.message, 'err'); } }
   async function cleanup() { try { const r = await postJSON('/maintenance/cleanup', {}); setMsg(r.backup || 'Pulizia completata'); toast('Pulizia completata'); await loadInfo(); } catch(e) { toast(e.message, 'err'); } }
   async function resetDb() { if (!confirm('Vuoi davvero svuotare l’archivio? Verrà creato un backup prima del reset.')) return; try { const r = await postJSON('/maintenance/reset', {}); setMsg(r.backup || 'Archivio resettato'); toast('Archivio resettato'); await loadInfo(); } catch(e) { toast(e.message, 'err'); } }
   async function exportDb() { try { const r = await getJSON('/maintenance/export'); downloadJson(r.filename || 'mn_laser_lab_export.json', r.data || {}); toast('Export JSON scaricato'); } catch(e) { toast(e.message, 'err'); } }
   async function importDb() { try { const parsed = JSON.parse(importText); await postJSON('/maintenance/import', { data: parsed }); setImportText(''); toast('Archivio importato'); await loadInfo(); } catch(e) { toast('JSON non valido o import non riuscito: ' + (e.message || e), 'err'); } }
+  async function saveBusiness() { try { await postJSON('/settings/business', biz); await loadBusiness(); toast('Impostazioni economiche salvate'); } catch(e) { toast(e.message, 'err'); } }
   return <>
     <PageTitle title="Impostazioni" desc="Gestione professionale dell’archivio: backup, export, import, pulizia e reset controllato." />
+    <Card title="Impostazioni economiche" icon={Settings2} sub="Valori standard usati nei preventivi: tariffa, margine, commissioni e costi ricorrenti." action={<button className="primary" onClick={saveBusiness}><Save /> Salva impostazioni</button>}>
+      <div className="form-grid small-grid">
+        <Input label="Tariffa oraria €/h" type="number" step="0.01" value={biz.hourly_rate ?? ''} onChange={e => setBiz({ ...biz, hourly_rate: e.target.value })} />
+        <Input label="Margine standard %" type="number" step="0.01" value={biz.default_margin ?? ''} onChange={e => setBiz({ ...biz, default_margin: e.target.value })} />
+        <Input label="Commissione standard %" type="number" step="0.01" value={biz.default_commission ?? ''} onChange={e => setBiz({ ...biz, default_commission: e.target.value })} />
+        <Input label="Sconto standard %" type="number" step="0.01" value={biz.default_discount ?? ''} onChange={e => setBiz({ ...biz, default_discount: e.target.value })} />
+        <Input label="Imballaggio €" type="number" step="0.01" value={biz.default_packaging ?? ''} onChange={e => setBiz({ ...biz, default_packaging: e.target.value })} />
+        <Input label="Energia €" type="number" step="0.01" value={biz.default_energy ?? ''} onChange={e => setBiz({ ...biz, default_energy: e.target.value })} />
+        <Input label="Usura laser €" type="number" step="0.01" value={biz.default_wear ?? ''} onChange={e => setBiz({ ...biz, default_wear: e.target.value })} />
+        <Input label="Validità preventivo giorni" type="number" step="1" value={biz.quote_validity_days ?? ''} onChange={e => setBiz({ ...biz, quote_validity_days: e.target.value })} />
+      </div>
+    </Card>
     <div className="settings-grid">
       <Card title="Stato archivio" icon={ShieldCheck} sub="Percorsi e stato del database locale usato dall’app.">
         <div className="settings-info"><span>Database</span><b>{info.db_path || '—'}</b><span>Cartella dati</span><b>{info.data_dir || '—'}</b><span>Ultimo controllo</span><b>{info.checked_at || '—'}</b></div>
@@ -846,7 +965,36 @@ function SettingsPage({ toast }) {
   </>;
 }
 
-function CommandPalette({ open, setOpen, nav, go }) { const [q, setQ] = useState(''); if (!open) return null; const rows = nav.filter(n => n.label.toLowerCase().includes(q.toLowerCase())); return <div className="cmd-back" onMouseDown={() => setOpen(false)}><div className="cmd" onMouseDown={e=>e.stopPropagation()}><div><Command /><input autoFocus placeholder="Vai a..." value={q} onChange={e=>setQ(e.target.value)} /></div>{rows.map(n => <button key={n.id} onClick={() => { go(n.id); setOpen(false); }}><n.icon />{n.label}<ChevronRight /></button>)}</div></div>; }
+function CommandPalette({ open, setOpen, nav, go }) {
+  const [q, setQ] = useState('');
+  const { data: results } = useApi(q ? `/global-search?q=${encodeURIComponent(q)}` : '/global-search?q=', {});
+  if (!open) return null;
+  const rows = nav.filter(n => n.label.toLowerCase().includes(q.toLowerCase()));
+  const resultGroups = [
+    ['Materiali', results.materials, 'materials'],
+    ['Prodotti', results.products, 'products'],
+    ['Clienti', results.customers, 'people'],
+    ['Fornitori', results.suppliers, 'people'],
+    ['Preventivi', results.quotes, 'quote'],
+    ['Vendite', results.sales, 'sales'],
+  ];
+  return <div className="cmd-back" onMouseDown={() => setOpen(false)}>
+    <div className="cmd cmd-wide" onMouseDown={e=>e.stopPropagation()}>
+      <div><Command /><input autoFocus placeholder="Cerca o vai a..." value={q} onChange={e=>setQ(e.target.value)} /></div>
+      {rows.map(n => <button key={n.id} onClick={() => { go(n.id); setOpen(false); }}><n.icon />{n.label}<ChevronRight /></button>)}
+      {q && <div className="global-results">
+        {resultGroups.map(([label, values, target]) => list(values).length ? <section key={label}>
+          <b>{label}</b>
+          {list(values).map((r, i) => <button key={label + i} onClick={() => { go(target); setOpen(false); }}>
+            <Search />
+            <span>{r.name || r.id}<small>{r.subtitle || r.status || ''}</small></span>
+            {r.value !== undefined && <em>{money(r.value)}</em>}
+          </button>)}
+        </section> : null)}
+      </div>}
+    </div>
+  </div>;
+}
 
 function App() {
   const [tab, setTab] = useState(() => localStorage.getItem('mnll_tab') === 'maintenance' ? 'settings' : (localStorage.getItem('mnll_tab') || 'studio'));

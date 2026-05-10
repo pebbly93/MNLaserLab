@@ -330,3 +330,123 @@ html[data-theme='dark'] .flow-pill-copy em{color:#9fb0c6;}
   margin-top: 7px;
   width: fit-content;
 }
+
+
+/* workflow advanced frontend patch */
+.workflow-alert-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workflow-alert-grid button {
+  text-align: left;
+  border: 1px solid rgba(148, 163, 184, .24);
+  background: rgba(255,255,255,.06);
+  color: inherit;
+  border-radius: 18px;
+  padding: 16px;
+  cursor: pointer;
+}
+
+.workflow-alert-grid b {
+  display: block;
+  font-size: 22px;
+  margin-bottom: 4px;
+}
+
+.workflow-alert-grid span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quote-status {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid rgba(148, 163, 184, .28);
+  background: rgba(148, 163, 184, .12);
+}
+
+.quote-status.sent {
+  background: rgba(59, 130, 246, .14);
+  color: #93c5fd;
+}
+
+.quote-status.accepted {
+  background: rgba(34, 197, 94, .14);
+  color: #86efac;
+}
+
+.quote-status.rejected {
+  background: rgba(239, 68, 68, .14);
+  color: #fca5a5;
+}
+
+.quote-status.expired {
+  background: rgba(249, 115, 22, .16);
+  color: #fdba74;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.table-actions button {
+  padding: 7px 9px;
+  font-size: 11px;
+}
+
+.cmd-wide {
+  width: min(860px, calc(100vw - 36px));
+}
+
+.global-results {
+  display: grid;
+  gap: 12px;
+  max-height: 52vh;
+  overflow: auto;
+  padding: 8px 2px 2px;
+}
+
+.global-results section {
+  display: grid;
+  gap: 6px;
+}
+
+.global-results section > b {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  padding: 6px 8px 0;
+}
+
+.global-results button {
+  display: grid !important;
+  grid-template-columns: 22px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.global-results small {
+  display: block;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.global-results em {
+  font-style: normal;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+@media (max-width: 900px) {
+  .workflow-alert-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
