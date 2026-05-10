@@ -5546,3 +5546,162 @@ input[type="submit"] {
     max-height: none !important;
   }
 }
+
+
+/* v41.1.3 clean areas manager and electron pdf */
+
+/* Nasconde vecchi tentativi inline delle aree */
+.catalog-inline-area-manager {
+  display: none !important;
+}
+
+/* Card gestione aree, larga e leggibile */
+.area-manager-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, .8fr) minmax(0, 1.2fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.area-create-box {
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(255,255,255,.045);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.area-create-box label {
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+
+.area-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.area-create-row input {
+  min-height: 44px;
+}
+
+.area-create-row button {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.area-create-box small {
+  display: block;
+  margin-top: 9px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.area-table-box {
+  min-width: 0;
+}
+
+.area-table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--muted);
+}
+
+.area-table-head b {
+  color: var(--text);
+}
+
+.area-table-head span {
+  border: 1px solid rgba(148, 163, 184, .18);
+  background: rgba(255,255,255,.06);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.area-table {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.area-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(255,255,255,.045);
+  border-radius: 16px;
+  padding: 11px 12px;
+}
+
+.area-table-row b,
+.area-table-row small {
+  display: block;
+}
+
+.area-table-row b {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.area-table-row small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.area-table-row button {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 999px;
+}
+
+/* La pagina categorie deve respirare */
+.catalog-treatments-section {
+  margin-top: 22px;
+}
+
+.catalog-treatments-section .card {
+  overflow: hidden;
+}
+
+/* Card 4 configurazioni: scroll interno */
+.catalog-board > *:nth-child(4),
+.catalog-grid > *:nth-child(4),
+.setup-catalog-grid > *:nth-child(4),
+.category-manager-grid > *:nth-child(4) {
+  max-height: 640px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+@media (max-width: 900px) {
+  .area-manager-layout,
+  .area-create-row,
+  .area-table-row {
+    grid-template-columns: 1fr;
+  }
+
+  .area-create-row button,
+  .area-table-row button {
+    width: 100%;
+  }
+
+  .area-table {
+    max-height: none;
+  }
+}

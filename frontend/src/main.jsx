@@ -1518,52 +1518,36 @@ function Quote({ toast }) {
     }
   }
 
+  
   async function openQuotePdf(q, type = 'customer') {
-    if (!q?.id) {
-      toast('Salva prima il preventivo', 'err');
+    const id = q?.id || q?.quote_id || q;
+    if (!id) {
+      toast('Preventivo non valido', 'err');
       return;
     }
 
-    const backendBase =
-      window.location.protocol === 'file:'
-        ? `http://${window.location.hostname}:8000`
-        : window.location.origin.includes('5173')
-          ? `http://${window.location.hostname}:8000`
-          : window.location.origin;
+    const host = window.location.hostname || '127.0.0.1';
+    const protocol = window.location.protocol?.startsWith('http') ? window.location.protocol : 'http:';
+    const apiRoot = `${protocol}//${host}:8000`;
+    const url = `${apiRoot}/api/quote-pdf/${type}?id=${encodeURIComponent(id)}`;
 
-    const url = `${backendBase}/api/quote-pdf/${type}?id=${encodeURIComponent(q.id)}`;
-    const cleanName = String(q.name || 'preventivo')
-      .replace(/[^\w\d\-_\s]/g, '')
-      .trim()
-      .replace(/\s+/g, '_');
+    const isElectronRuntime = /Electron/i.test(navigator.userAgent || '');
 
-    const defaultName = `${type === 'customer' ? 'Preventivo_cliente' : 'Preventivo_interno'}_${cleanName || q.id}.pdf`;
-
-    const api = window.mnLaserLab || window.mnLaserLabPdf;
-
-    if (api?.saveQuotePdf) {
-      const result = await api.saveQuotePdf({ url, defaultName });
-
-      if (result?.ok) {
-        toast(`PDF salvato: ${result.path}`);
-        return;
-      }
-
-      if (result?.canceled) {
-        toast('Salvataggio annullato');
-        return;
-      }
-
-      toast(result?.error || 'Salvataggio PDF non riuscito', 'err');
+    // In Electron evitiamo window.open perché spesso viene bloccato o non apre la finestra.
+    // Apriamo il PDF/HTML nella stessa finestra.
+    if (isElectronRuntime) {
+      window.location.href = url;
       return;
     }
 
-    const popup = window.open(url, '_blank');
-
-    if (!popup) {
+    // Browser normale: nuova scheda, con fallback sulla stessa finestra.
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) {
       window.location.href = url;
     }
   }
+
+
 
   const costLabels = {
     hours: 'Ore lavoro', rate: 'Tariffa €/h', packaging: 'Imballaggio €', energy: 'Energia €', wear: 'Usura macchina €', commission: 'Commissioni %', project_fee: 'Spese di progetto €', margin: 'Margine %', discount: 'Sconto %'
@@ -1688,15 +1672,21 @@ function Sales({ toast }) {
 
 
 
-function CatalogAreaInlineManager({ toast, refreshTax, refreshSug }) {
+
+
+function CatalogAreasSection({ toast, refreshTax, refreshSug }) {
   const { data: areas, refresh: refreshAreas } = useApi('/catalog/areas', []);
   const [areaName, setAreaName] = useState('');
 
   async function saveArea() {
-    if (!areaName.trim()) { toast('Inserisci il nome area', 'err'); return; }
+    const name = areaName.trim();
+    if (!name) {
+      toast('Inserisci il nome area', 'err');
+      return;
+    }
 
     try {
-      await postJSON('/catalog/areas', { name: areaName.trim() });
+      await postJSON('/catalog/areas', { name });
       setAreaName('');
       toast('Area catalogo salvata');
       refreshAreas();
@@ -1708,7 +1698,7 @@ function CatalogAreaInlineManager({ toast, refreshTax, refreshSug }) {
   }
 
   async function removeArea(name) {
-    if (!confirm(`Eliminare l'area "${name}"? Puoi eliminarla solo se non è usata.`)) return;
+    if (!confirm(`Eliminare l'area "${name}"? Puoi eliminarla solo se non è usata da materiali, categorie o fornitori.`)) return;
 
     try {
       await del('/catalog/areas/' + encodeURIComponent(name));
@@ -1721,29 +1711,40 @@ function CatalogAreaInlineManager({ toast, refreshTax, refreshSug }) {
     }
   }
 
-  return <div className="catalog-inline-area-manager">
-    <div className="catalog-inline-title">
-      <b>Gestisci aree</b>
-      <small>Aggiungi ambiti come Finiture, Packaging o Vernici.</small>
-    </div>
+  return <Card title="Gestione aree catalogo" icon={Layers3} sub="Crea e organizza gli ambiti principali del catalogo: materiali, componenti, finiture, packaging, vernici e lavorazioni.">
+    <div className="area-manager-layout">
+      <div className="area-create-box">
+        <label>Nuova area</label>
+        <div className="area-create-row">
+          <input
+            placeholder="Es. Finiture, Packaging, Vernici..."
+            value={areaName}
+            onChange={e => setAreaName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') saveArea(); }}
+          />
+          <button className="primary" onClick={saveArea}><Plus /> Aggiungi</button>
+        </div>
+        <small>Le aree compariranno negli acquisti, nei fornitori e nella gestione categorie.</small>
+      </div>
 
-    <div className="catalog-inline-area-form">
-      <input
-        placeholder="Nuova area..."
-        value={areaName}
-        onChange={e => setAreaName(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') saveArea(); }}
-      />
-      <button className="primary" onClick={saveArea}><Plus /></button>
-    </div>
+      <div className="area-table-box">
+        <div className="area-table-head">
+          <b>Aree disponibili</b>
+          <span>{list(areas).length} aree</span>
+        </div>
 
-    <div className="area-chip-list compact">
-      {list(areas).map(a => <span key={a} className="area-chip">
-        {a}
-        <button title="Elimina area" onClick={() => removeArea(a)}><Trash2 /></button>
-      </span>)}
+        <div className="area-table">
+          {list(areas).map(a => <div className="area-table-row" key={a}>
+            <div>
+              <b>{a}</b>
+              <small>Ambito catalogo</small>
+            </div>
+            <button className="ghost danger" onClick={() => removeArea(a)}><Trash2 /> Elimina</button>
+          </div>)}
+        </div>
+      </div>
     </div>
-  </div>;
+  </Card>;
 }
 
 
@@ -2034,6 +2035,7 @@ function Setup({ toast }) {
 
   return <>
     <PageTitle title="Catalogo" desc="Gestisci aree, categorie, sottocategorie e configurazioni collegate." />
+    <CatalogAreasSection toast={toast} refreshTax={refreshTax} refreshSug={refreshSug} />
 
     <Card title="Gestione catalogo" icon={Settings2} >
       <div className="catalog-topbar">
@@ -2052,7 +2054,6 @@ function Setup({ toast }) {
           <div>
             <b>Aree</b>
             <small>Ambito del materiale</small>
-          <CatalogAreaInlineManager toast={toast} refreshTax={refreshTax} refreshSug={refreshSug} />
           </div>
         </div>
 
