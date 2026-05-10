@@ -8,6 +8,7 @@ import sqlite3
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+import re
 
 APP_NAME = "MN Laser Lab Manager"
 DB_FILE = "mn_laser_lab.db"
