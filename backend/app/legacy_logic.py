@@ -2560,7 +2560,7 @@ def quote_customer_html(db, quote_id):
 </body>
 </html>"""
 
-    return html
+    return inject_pdf_back_button(html)
 
 def quote_internal_html(db, quote_id):
     quote = get_quote(db, quote_id)
@@ -2749,7 +2749,7 @@ def quote_internal_html(db, quote_id):
   </main>
 </body>
 </html>"""
-    return apply_pdf_brand_to_html(db, html, 'internal', quote)
+    return inject_pdf_back_button(apply_pdf_brand_to_html(db, html, 'internal', quote))
 
 
 # ---------------------------------------------------------------------------
@@ -3906,3 +3906,35 @@ def delete_wood_treatment(db, name):
     db["wood_treatments"] = treatments
 
     return {"ok": True, "treatments": treatments}
+
+
+def inject_pdf_back_button(html):
+    if "back-btn" not in html:
+        html = html.replace("<body>", "<body>\n  <button class=\\"back-btn\\" onclick=\\"window.location.href='/'\\">← Torna al gestionale</button>", 1)
+
+    if ".back-btn" not in html:
+        css = """
+    .back-btn {
+      position: fixed;
+      left: 20px;
+      top: 20px;
+      border: 0;
+      background: #0f172a;
+      color: white;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 12px 30px rgba(0,0,0,.18);
+      z-index: 100;
+    }
+
+    @media print {
+      .back-btn {
+        display: none !important;
+      }
+    }
+"""
+        html = html.replace("</style>", css + "\\n  </style>", 1)
+
+    return html
