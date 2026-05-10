@@ -624,3 +624,60 @@ def import_archive(payload: Payload):
     backup = backup_database("prima_import")
     save_db(normalize_db(incoming))
     return {"ok": True, "backup": backup}
+
+
+@app.get("/api/settings/business")
+def get_business_settings():
+    return business_settings(load_db())
+
+
+@app.post("/api/settings/business")
+def set_business_settings(payload: Payload):
+    return mutate(update_business_settings, payload.data)
+
+
+@app.get("/api/quotes")
+def quotes_api():
+    return list_quotes(load_db())
+
+
+@app.post("/api/quotes")
+def save_quote_api(payload: Payload):
+    return mutate(save_quote, payload.data)
+
+
+@app.get("/api/quotes/{quote_id:path}")
+def get_quote_api(quote_id: str):
+    try:
+        return get_quote(load_db(), quote_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@app.post("/api/quotes/{quote_id:path}/status")
+def quote_status_api(quote_id: str, payload: Payload):
+    status = payload.data.get("status") or "draft"
+    return mutate(update_quote_status, quote_id, status)
+
+
+@app.post("/api/quotes/{quote_id:path}/to-product")
+def quote_to_product_api(quote_id: str, payload: Payload):
+    return mutate(quote_to_product, quote_id, payload.data)
+
+
+@app.get("/api/raw-detail/{table}/{key:path}")
+def raw_detail_api(table: str, key: str):
+    try:
+        return raw_detail(load_db(), table, key)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@app.get("/api/global-search")
+def global_search_api(q: str = ""):
+    return global_search(load_db(), q)
+
+
+@app.get("/api/workflow/alerts")
+def workflow_alerts_api():
+    return workflow_alerts(load_db())
