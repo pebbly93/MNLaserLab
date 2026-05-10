@@ -714,8 +714,21 @@ function Quote({ toast }) {
       toast('Salva prima il preventivo', 'err');
       return;
     }
-    const url = `/api/quotes/${encodeURIComponent(q.id)}/pdf/${type}`;
-    window.open(url, '_blank');
+
+    const backendBase =
+      window.location.protocol === 'file:'
+        ? 'http://127.0.0.1:8000'
+        : window.location.origin.includes('5173')
+          ? 'http://127.0.0.1:8000'
+          : window.location.origin;
+
+    const url = `${backendBase}/api/quotes/${encodeURIComponent(q.id)}/pdf/${type}`;
+
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+
+    if (!popup) {
+      window.location.href = url;
+    }
   }
 
   const costLabels = {
@@ -838,6 +851,10 @@ function Setup({ toast }) {
   const { data: tax, refresh: refreshTax } = useApi('/taxonomy', { raw_tree: [], product_tree: [], supplier_matrix: [] });
   const { data: sug, refresh: refreshSug } = useApi('/suggestions', {});
 
+  const [tab, setTab] = useState('raw');
+  const [q, setQ] = useState('');
+  const [scopeFilter, setScopeFilter] = useState('all');
+
   const [raw, setRaw] = useState({ scope: 'materials', category: '', subcategory: '' });
   const [prod, setProd] = useState({ category: '', subcategory: '', collection: '' });
   const [fmt, setFmt] = useState({ category: '', value: '' });
@@ -878,13 +895,8 @@ function Setup({ toast }) {
 
   async function removeProductLink(r) {
     if (!confirm(`Eliminare il collegamento "${r.category} → ${r.subcategory} → ${r.collection}"?`)) return;
-
     try {
-      const params = new URLSearchParams({
-        category: r.category,
-        subcategory: r.subcategory,
-        collection: r.collection,
-      });
+      const params = new URLSearchParams({ category: r.category, subcategory: r.subcategory, collection: r.collection });
       await del('/product-links?' + params.toString());
       toast('Collegamento prodotto eliminato');
       await reloadCatalog();
@@ -944,7 +956,7 @@ function Setup({ toast }) {
     }
   }
 
-  const rawRows = list(tax.raw_tree).flatMap(sec =>
+  const rawRowsAll = list(tax.raw_tree).flatMap(sec =>
     list(sec.categories).flatMap(c =>
       list(c.subcategories).length
         ? list(c.subcategories).map(sub => ({
@@ -964,105 +976,87 @@ function Setup({ toast }) {
     )
   );
 
-  const prodRows = Object.entries(sug.collections_by_product_path || {}).flatMap(([cat, subMap]) =>
+  const prodRowsAll = Object.entries(sug.collections_by_product_path || {}).flatMap(([cat, subMap]) =>
     Object.entries(subMap || {}).flatMap(([sub, cols]) =>
       list(cols).map(col => ({ category: cat, subcategory: sub, collection: col }))
     )
   );
 
-  const formatRows = Object.entries(sug.formats_by_category || {}).flatMap(([category, values]) =>
+  const formatRowsAll = Object.entries(sug.formats_by_category || {}).flatMap(([category, values]) =>
     list(values).map(value => ({ category, value }))
   );
 
-  const thicknessRows = Object.entries(sug.thicknesses_by_category || {}).flatMap(([category, values]) =>
+  const thicknessRowsAll = Object.entries(sug.thicknesses_by_category || {}).flatMap(([category, values]) =>
     list(values).map(value => ({ category, value }))
   );
 
-  const typologyRows = Object.entries(sug.typologies_by_category_subcategory || {}).flatMap(([category, subMap]) =>
+  const typologyRowsAll = Object.entries(sug.typologies_by_category_subcategory || {}).flatMap(([category, subMap]) =>
     Object.entries(subMap || {}).flatMap(([subcategory, values]) =>
       list(values).map(value => ({ category, subcategory, value }))
     )
   );
 
-  const allRawCategories = unique([
-    ...list(sug.raw_categories),
-    ...rawRows.map(r => r.category),
-  ]);
+  const allRawCategories = unique([...list(sug.raw_categories), ...rawRowsAll.map(r => r.category)]);
+  const areaChoices = list(tax.raw_tree).map(x => ({ scope: x.scope, label: x.label }));
+
+  const textMatch = row => {
+    const t = Object.values(row || {}).join(' ').toLowerCase();
+    return !q || q.toLowerCase().split(/\s+/).every(part => t.includes(part));
+  };
+
+  const rawRows = rawRowsAll
+    .filter(r => scopeFilter === 'all' || r.scope === scopeFilter || r.area === scopeFilter)
+    .filter(textMatch);
+
+  const prodRows = prodRowsAll.filter(textMatch);
+  const formatRows = formatRowsAll.filter(textMatch);
+  const thicknessRows = thicknessRowsAll.filter(textMatch);
+  const typologyRows = typologyRowsAll.filter(textMatch);
 
   const typSubcategories = typ.category
-    ? unique(rawRows.filter(r => r.category === typ.category).map(r => r.subcategory).filter(Boolean))
+    ? unique(rawRowsAll.filter(r => r.category === typ.category).map(r => r.subcategory).filter(Boolean))
     : [];
 
+  const formCategoryOptions = scopeFilter === 'all'
+    ? allRawCategories
+    : unique(rawRowsAll.filter(r => r.scope === scopeFilter || r.area === scopeFilter).map(r => r.category));
+
   return <>
-    <PageTitle title="Catalogo" desc="Gestisci aree, categorie, sottocategorie, formati, spessori e tipologie collegate al flusso acquisti e prodotti." />
+    <PageTitle title="Catalogo" desc="Gestisci categorie, formati, spessori e tipologie senza mischiare aree diverse come Falegnameria e Illuminazione." />
 
-    <div className="split-main">
-      <Card title="Catalogo materiali" icon={Truck} sub="Struttura logica per acquisti e magazzino. Esempio: Falegnameria → Legname → Betulla." action={<button onClick={() => save('/categories', raw, 'Categoria materiale salvata')}><Plus /> Salva</button>}>
-        <div className="form-grid">
-          <Select label="Area" value={raw.scope} onChange={e=>setRaw({...raw,scope:e.target.value,category:'',subcategory:''})}>
-            <option value="materials">Falegnameria</option>
-            <option value="components">Ferramenta</option>
-            <option value="Illuminazione">Illuminazione</option>
-          </Select>
-          <SmartInput label="Categoria materiale" options={rawCatsStrict ? rawCatsStrict(sug, raw.scope) : rawCats(sug, raw.scope)} value={raw.category} onChange={e=>setRaw({...raw,category:e.target.value,subcategory:''})}/>
-          <SmartInput label="Sottocategoria / variante" options={rawSubsStrict ? rawSubsStrict(sug, raw.scope, raw.category) : rawSubs(sug, raw.scope, raw.category)} value={raw.subcategory} onChange={e=>setRaw({...raw,subcategory:e.target.value})}/>
+    <Card title="Centro catalogo" icon={Settings2} sub="Scegli cosa vuoi configurare, filtra per area e cerca velocemente ciò che vuoi modificare.">
+      <div className="catalog-toolbar">
+        <div className="catalog-tabs">
+          <button className={tab === 'raw' ? 'active' : ''} onClick={() => setTab('raw')}>Materiali</button>
+          <button className={tab === 'formats' ? 'active' : ''} onClick={() => setTab('formats')}>Formati</button>
+          <button className={tab === 'thicknesses' ? 'active' : ''} onClick={() => setTab('thicknesses')}>Spessori</button>
+          <button className={tab === 'typologies' ? 'active' : ''} onClick={() => setTab('typologies')}>Tipologie</button>
+          <button className={tab === 'products' ? 'active' : ''} onClick={() => setTab('products')}>Prodotti</button>
         </div>
-      </Card>
 
-      <Card title="Catalogo prodotti finiti" icon={Tags} sub="Categorie commerciali dei prodotti realizzati. Esempio: Orologi → Anime → One Piece." action={<button onClick={() => save('/product-links', prod, 'Collezione prodotto salvata')}><Plus /> Salva</button>}>
-        <div className="form-grid">
-          <SmartInput label="Categoria prodotto" options={sug.product_categories} value={prod.category} onChange={e=>setProd({...prod,category:e.target.value,subcategory:'',collection:''})}/>
-          <SmartInput label="Sottocategoria prodotto" options={prodSubs(sug, prod.category)} value={prod.subcategory} onChange={e=>setProd({...prod,subcategory:e.target.value,collection:''})}/>
-          <SmartInput label="Collezione / tema" options={collections(sug, prod.category, prod.subcategory)} value={prod.collection} onChange={e=>setProd({...prod,collection:e.target.value})}/>
+        <div className="catalog-filters">
+          <select value={scopeFilter} onChange={e => setScopeFilter(e.target.value)}>
+            <option value="all">Tutte le aree</option>
+            {areaChoices.map(a => <option key={a.scope} value={a.scope}>{a.label}</option>)}
+          </select>
+          <SearchBox value={q} onChange={setQ} placeholder="Cerca categoria, sottocategoria, formato..." />
         </div>
-      </Card>
-    </div>
-
-    <div className="split-main">
-      <Card title="Formati per categoria" icon={Layers3} sub="Associa i formati alla categoria corretta. Esempio: Legname → 20x20, 40x40.">
-        <div className="form-grid compact-catalog-form">
-          <SmartInput label="Categoria" options={allRawCategories} value={fmt.category} onChange={e=>setFmt({...fmt,category:e.target.value})}/>
-          <SmartInput label="Formato / tipo" options={formats(sug, fmt.category)} value={fmt.value} onChange={e=>setFmt({...fmt,value:e.target.value})} placeholder="Es. 20x20, 40x40, Bobina, Rotolo"/>
-          <button className="primary" onClick={saveFormat}><Plus /> Aggiungi formato</button>
-        </div>
-        <DataTable rows={formatRows} empty="Nessun formato configurato" columns={[
-          {key:'category',label:'Categoria'},
-          {key:'value',label:'Formato'},
-          {key:'act',label:'',render:r=><button className="ghost danger" onClick={()=>removeFormat(r.category, r.value)}><Trash2 /></button>}
-        ]} />
-      </Card>
-
-      <Card title="Spessori per categoria" icon={Layers3} sub="Associa gli spessori solo dove servono. Esempio: Legname → 2 mm, 4 mm, 10 mm.">
-        <div className="form-grid compact-catalog-form">
-          <SmartInput label="Categoria" options={allRawCategories} value={thk.category} onChange={e=>setThk({...thk,category:e.target.value})}/>
-          <SmartInput label="Spessore" options={thicknesses(sug, thk.category)} value={thk.value} onChange={e=>setThk({...thk,value:e.target.value})} placeholder="Es. 2 mm, 4 mm, 10 mm"/>
-          <button className="primary" onClick={saveThickness}><Plus /> Aggiungi spessore</button>
-        </div>
-        <DataTable rows={thicknessRows} empty="Nessuno spessore configurato" columns={[
-          {key:'category',label:'Categoria'},
-          {key:'value',label:'Spessore'},
-          {key:'act',label:'',render:r=><button className="ghost danger" onClick={()=>removeThickness(r.category, r.value)}><Trash2 /></button>}
-        ]} />
-      </Card>
-    </div>
-
-    <Card title="Tipologie per sottocategoria" icon={Settings2} sub="Usale per casi come Illuminazione → Alimentatori → 12V → Da presa / Da incasso.">
-      <div className="form-grid compact-catalog-form">
-        <SmartInput label="Categoria" options={allRawCategories} value={typ.category} onChange={e=>setTyp({...typ,category:e.target.value,subcategory:'',value:''})}/>
-        <SmartInput label="Sottocategoria" options={typSubcategories} value={typ.subcategory} onChange={e=>setTyp({...typ,subcategory:e.target.value,value:''})}/>
-        <SmartInput label="Tipologia" options={typologies(sug, typ.category, typ.subcategory)} value={typ.value} onChange={e=>setTyp({...typ,value:e.target.value})} placeholder="Es. Da presa, Da incasso, Luce calda"/>
-        <button className="primary" onClick={saveTypology}><Plus /> Aggiungi tipologia</button>
       </div>
-      <DataTable rows={typologyRows} empty="Nessuna tipologia configurata" columns={[
-        {key:'category',label:'Categoria'},
-        {key:'subcategory',label:'Sottocategoria'},
-        {key:'value',label:'Tipologia'},
-        {key:'act',label:'',render:r=><button className="ghost danger" onClick={()=>removeTypology(r.category, r.subcategory, r.value)}><Trash2 /></button>}
-      ]} />
     </Card>
 
-    <div className="split-main">
-      <Card title="Categorie materiali presenti" icon={Layers3}>
+    {tab === 'raw' && <>
+      <Card title="Aggiungi categoria materiale" icon={Truck} sub="Esempio: Falegnameria → Legname → Betulla. Illuminazione resta separata da Legname.">
+        <div className="catalog-editor-grid">
+          <Select label="Area" value={raw.scope} onChange={e=>setRaw({...raw,scope:e.target.value,category:'',subcategory:''})}>
+            {areaChoices.map(a => <option key={a.scope} value={a.scope}>{a.label}</option>)}
+          </Select>
+          <SmartInput label="Categoria" options={rawCatsStrict ? rawCatsStrict(sug, raw.scope) : rawCats(sug, raw.scope)} value={raw.category} onChange={e=>setRaw({...raw,category:e.target.value,subcategory:''})}/>
+          <SmartInput label="Sottocategoria" options={rawSubsStrict ? rawSubsStrict(sug, raw.scope, raw.category) : rawSubs(sug, raw.scope, raw.category)} value={raw.subcategory} onChange={e=>setRaw({...raw,subcategory:e.target.value})}/>
+          <button className="primary" onClick={() => save('/categories', raw, 'Categoria materiale salvata')}><Plus /> Salva</button>
+        </div>
+      </Card>
+
+      <Card title="Categorie materiali" icon={Layers3} sub={`${rawRows.length} elementi visualizzati`}>
         <DataTable rows={rawRows} empty="Nessuna categoria materiale" columns={[
           {key:'area',label:'Area'},
           {key:'category',label:'Categoria'},
@@ -1074,16 +1068,83 @@ function Setup({ toast }) {
           </div>}
         ]} />
       </Card>
+    </>}
 
-      <Card title="Categorie prodotti presenti" icon={Factory}>
+    {tab === 'formats' && <>
+      <Card title="Aggiungi formato" icon={Layers3} sub="Associa i formati solo alla categoria corretta. Esempio: Legname → 20x20, 40x40.">
+        <div className="catalog-editor-grid">
+          <SmartInput label="Categoria" options={formCategoryOptions} value={fmt.category} onChange={e=>setFmt({...fmt,category:e.target.value})}/>
+          <SmartInput label="Formato / tipo" options={formats(sug, fmt.category)} value={fmt.value} onChange={e=>setFmt({...fmt,value:e.target.value})} placeholder="Es. 20x20, 40x40, Rotolo"/>
+          <button className="primary" onClick={saveFormat}><Plus /> Aggiungi</button>
+        </div>
+      </Card>
+
+      <Card title="Formati configurati" icon={Layers3} sub={`${formatRows.length} elementi visualizzati`}>
+        <DataTable rows={formatRows} empty="Nessun formato configurato" columns={[
+          {key:'category',label:'Categoria'},
+          {key:'value',label:'Formato'},
+          {key:'act',label:'Azioni',render:r=><button className="ghost danger" onClick={()=>removeFormat(r.category, r.value)}><Trash2 /> Elimina</button>}
+        ]} />
+      </Card>
+    </>}
+
+    {tab === 'thicknesses' && <>
+      <Card title="Aggiungi spessore" icon={Layers3} sub="Associa gli spessori alle categorie corrette. Esempio: Legname → 2 mm, 4 mm, 10 mm.">
+        <div className="catalog-editor-grid">
+          <SmartInput label="Categoria" options={formCategoryOptions} value={thk.category} onChange={e=>setThk({...thk,category:e.target.value})}/>
+          <SmartInput label="Spessore" options={thicknesses(sug, thk.category)} value={thk.value} onChange={e=>setThk({...thk,value:e.target.value})} placeholder="Es. 2 mm, 4 mm, 10 mm"/>
+          <button className="primary" onClick={saveThickness}><Plus /> Aggiungi</button>
+        </div>
+      </Card>
+
+      <Card title="Spessori configurati" icon={Layers3} sub={`${thicknessRows.length} elementi visualizzati`}>
+        <DataTable rows={thicknessRows} empty="Nessuno spessore configurato" columns={[
+          {key:'category',label:'Categoria'},
+          {key:'value',label:'Spessore'},
+          {key:'act',label:'Azioni',render:r=><button className="ghost danger" onClick={()=>removeThickness(r.category, r.value)}><Trash2 /> Elimina</button>}
+        ]} />
+      </Card>
+    </>}
+
+    {tab === 'typologies' && <>
+      <Card title="Aggiungi tipologia" icon={Settings2} sub="Esempio: Illuminazione → Alimentatori → 12V → Da presa.">
+        <div className="catalog-editor-grid">
+          <SmartInput label="Categoria" options={formCategoryOptions} value={typ.category} onChange={e=>setTyp({...typ,category:e.target.value,subcategory:'',value:''})}/>
+          <SmartInput label="Sottocategoria" options={typSubcategories} value={typ.subcategory} onChange={e=>setTyp({...typ,subcategory:e.target.value,value:''})}/>
+          <SmartInput label="Tipologia" options={typologies(sug, typ.category, typ.subcategory)} value={typ.value} onChange={e=>setTyp({...typ,value:e.target.value})} placeholder="Es. Da presa, Da incasso, Luce calda"/>
+          <button className="primary" onClick={saveTypology}><Plus /> Aggiungi</button>
+        </div>
+      </Card>
+
+      <Card title="Tipologie configurate" icon={Settings2} sub={`${typologyRows.length} elementi visualizzati`}>
+        <DataTable rows={typologyRows} empty="Nessuna tipologia configurata" columns={[
+          {key:'category',label:'Categoria'},
+          {key:'subcategory',label:'Sottocategoria'},
+          {key:'value',label:'Tipologia'},
+          {key:'act',label:'Azioni',render:r=><button className="ghost danger" onClick={()=>removeTypology(r.category, r.subcategory, r.value)}><Trash2 /> Elimina</button>}
+        ]} />
+      </Card>
+    </>}
+
+    {tab === 'products' && <>
+      <Card title="Aggiungi collegamento prodotto" icon={Tags} sub="Esempio: Orologi → Anime → One Piece.">
+        <div className="catalog-editor-grid">
+          <SmartInput label="Categoria prodotto" options={sug.product_categories} value={prod.category} onChange={e=>setProd({...prod,category:e.target.value,subcategory:'',collection:''})}/>
+          <SmartInput label="Sottocategoria prodotto" options={prodSubs(sug, prod.category)} value={prod.subcategory} onChange={e=>setProd({...prod,subcategory:e.target.value,collection:''})}/>
+          <SmartInput label="Collezione / tema" options={collections(sug, prod.category, prod.subcategory)} value={prod.collection} onChange={e=>setProd({...prod,collection:e.target.value})}/>
+          <button className="primary" onClick={() => save('/product-links', prod, 'Collezione prodotto salvata')}><Plus /> Salva</button>
+        </div>
+      </Card>
+
+      <Card title="Categorie prodotti" icon={Factory} sub={`${prodRows.length} elementi visualizzati`}>
         <DataTable rows={prodRows} empty="Nessuna categoria prodotto" columns={[
           {key:'category',label:'Categoria'},
           {key:'subcategory',label:'Sottocategoria'},
           {key:'collection',label:'Collezione'},
-          {key:'act',label:'',render:r=><button className="ghost danger" onClick={()=>removeProductLink(r)}><Trash2 /></button>}
+          {key:'act',label:'Azioni',render:r=><button className="ghost danger" onClick={()=>removeProductLink(r)}><Trash2 /> Elimina</button>}
         ]} />
       </Card>
-    </div>
+    </>}
   </>;
 }
 
