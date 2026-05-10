@@ -49,6 +49,7 @@ jobs:
           Copy-Item dist\MN_Laser_Lab_Browser package\MN_Laser_Lab_Browser -Recurse
           Copy-Item Avvia_MN_Laser_Lab_Browser_Windows.bat package\Avvia_MN_Laser_Lab_Browser_Windows.bat
           Copy-Item Avvia_MN_Laser_Lab_Browser_Windows.ps1 package\Avvia_MN_Laser_Lab_Browser_Windows.ps1 -ErrorAction SilentlyContinue
+          Copy-Item windows_service\* package\ -Recurse -Force
           Compress-Archive -Path package\* -DestinationPath MN_Laser_Lab_Browser_Windows.zip -Force
 
       - name: Upload artifact
