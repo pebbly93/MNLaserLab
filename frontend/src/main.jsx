@@ -1687,11 +1687,10 @@ function Sales({ toast }) {
 }
 
 
-function CatalogAdvancedSettings({ toast, refreshTax, refreshSug }) {
+
+function CatalogAreaInlineManager({ toast, refreshTax, refreshSug }) {
   const { data: areas, refresh: refreshAreas } = useApi('/catalog/areas', []);
-  const { data: treatments, refresh: refreshTreatments } = useApi('/catalog/wood-treatments', []);
   const [areaName, setAreaName] = useState('');
-  const [tr, setTr] = useState({ name: '', type: 'pacchetto', steps: 'Fondo + Colore + Trasparente', unit_cost: '', labor_hours: '', notes: '' });
 
   async function saveArea() {
     if (!areaName.trim()) { toast('Inserisci il nome area', 'err'); return; }
@@ -1721,6 +1720,36 @@ function CatalogAdvancedSettings({ toast, refreshTax, refreshSug }) {
       toast(e.message, 'err');
     }
   }
+
+  return <div className="catalog-inline-area-manager">
+    <div className="catalog-inline-title">
+      <b>Gestisci aree</b>
+      <small>Aggiungi ambiti come Finiture, Packaging o Vernici.</small>
+    </div>
+
+    <div className="catalog-inline-area-form">
+      <input
+        placeholder="Nuova area..."
+        value={areaName}
+        onChange={e => setAreaName(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') saveArea(); }}
+      />
+      <button className="primary" onClick={saveArea}><Plus /></button>
+    </div>
+
+    <div className="area-chip-list compact">
+      {list(areas).map(a => <span key={a} className="area-chip">
+        {a}
+        <button title="Elimina area" onClick={() => removeArea(a)}><Trash2 /></button>
+      </span>)}
+    </div>
+  </div>;
+}
+
+
+function CatalogAdvancedSettings({ toast, refreshSug }) {
+  const { data: treatments, refresh: refreshTreatments } = useApi('/catalog/wood-treatments', []);
+  const [tr, setTr] = useState({ name: '', type: 'pacchetto', steps: 'Fondo + Colore + Trasparente', unit_cost: '', labor_hours: '', notes: '' });
 
   async function saveTreatment() {
     if (!tr.name.trim()) { toast('Inserisci il nome trattamento', 'err'); return; }
@@ -1756,21 +1785,7 @@ function CatalogAdvancedSettings({ toast, refreshTax, refreshSug }) {
     }
   }
 
-  return <div className="catalog-advanced-panel">
-    <Card title="Aree catalogo" icon={Layers3} sub="Crea aree personalizzate oltre Falegnameria, Ferramenta e Illuminazione.">
-      <div className="inline catalog-area-form">
-        <input placeholder="Nuova area, es. Finiture, Packaging, Vernici..." value={areaName} onChange={e => setAreaName(e.target.value)} />
-        <button className="primary" onClick={saveArea}><Plus /> Aggiungi area</button>
-      </div>
-
-      <div className="area-chip-list">
-        {list(areas).map(a => <span key={a} className="area-chip">
-          {a}
-          <button title="Elimina area" onClick={() => removeArea(a)}><Trash2 /></button>
-        </span>)}
-      </div>
-    </Card>
-
+  return <div className="catalog-treatments-section">
     <Card title="Trattamenti legno" icon={Sparkles} sub="Configura cicli di finitura semplici o pacchetti: mordente, smalto, fondo, trasparente, flatting.">
       <div className="form-grid treatment-form">
         <Input label="Nome trattamento" value={tr.name} onChange={e => setTr({ ...tr, name: e.target.value })} placeholder="Pacchetto smalto completo" />
@@ -2019,7 +2034,6 @@ function Setup({ toast }) {
 
   return <>
     <PageTitle title="Catalogo" desc="Gestisci aree, categorie, sottocategorie e configurazioni collegate." />
-    <CatalogAdvancedSettings toast={toast} refreshTax={refreshTax} refreshSug={refreshSug} />
 
     <Card title="Gestione catalogo" icon={Settings2} >
       <div className="catalog-topbar">
@@ -2038,6 +2052,7 @@ function Setup({ toast }) {
           <div>
             <b>Aree</b>
             <small>Ambito del materiale</small>
+          <CatalogAreaInlineManager toast={toast} refreshTax={refreshTax} refreshSug={refreshSug} />
           </div>
         </div>
 
@@ -2197,6 +2212,8 @@ function Setup({ toast }) {
         ]} />
       </Card>
     </div>}
+  
+    <CatalogAdvancedSettings toast={toast} refreshSug={refreshSug} />
   </>;
 }
 

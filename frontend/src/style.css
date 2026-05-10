@@ -5392,3 +5392,157 @@ input[type="submit"] {
     margin-bottom: 16px;
   }
 }
+
+
+/* v41.1.2 integrated catalog layout */
+
+/* Il pannello avanzato non deve stare sopra al titolo pagina */
+.catalog-advanced-panel {
+  display: none !important;
+}
+
+/* Trattamenti sotto la gestione catalogo */
+.catalog-treatments-section {
+  margin-top: 22px;
+}
+
+/* Gestore aree integrato nella colonna 1 */
+.catalog-inline-area-manager {
+  margin: 12px 0 14px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(255,255,255,.045);
+  border-radius: 18px;
+}
+
+.catalog-inline-title {
+  margin-bottom: 10px;
+}
+
+.catalog-inline-title b,
+.catalog-inline-title small {
+  display: block;
+}
+
+.catalog-inline-title b {
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.catalog-inline-title small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.catalog-inline-area-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+  align-items: center;
+}
+
+.catalog-inline-area-form input {
+  min-height: 40px;
+}
+
+.catalog-inline-area-form button {
+  width: 42px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+}
+
+.catalog-inline-area-form svg {
+  width: 17px;
+  height: 17px;
+}
+
+.area-chip-list.compact {
+  margin-top: 10px;
+  gap: 6px;
+  max-height: 96px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.area-chip-list.compact .area-chip {
+  font-size: 11px;
+  padding: 6px 7px 6px 9px;
+}
+
+.area-chip-list.compact .area-chip button {
+  width: 21px;
+  height: 21px;
+  min-height: 21px;
+}
+
+/* Gestione catalogo più allineata */
+.catalog-board,
+.catalog-grid,
+.setup-catalog-grid,
+.category-manager-grid {
+  align-items: stretch !important;
+}
+
+.catalog-board > *,
+.catalog-grid > *,
+.setup-catalog-grid > *,
+.category-manager-grid > * {
+  min-height: 0;
+}
+
+/* Colonna 4: scroll interno vero */
+.catalog-board > *:nth-child(4),
+.catalog-grid > *:nth-child(4),
+.setup-catalog-grid > *:nth-child(4),
+.category-manager-grid > *:nth-child(4) {
+  max-height: 640px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* Colonne più ordinate */
+.catalog-board .card,
+.catalog-grid .card,
+.setup-catalog-grid .card,
+.category-manager-grid .card {
+  height: 100%;
+}
+
+/* Trattamenti più larghi e sotto */
+.catalog-treatments-section .card {
+  overflow: hidden;
+}
+
+.catalog-treatments-section .treatment-list {
+  max-height: 300px;
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+  .catalog-inline-area-form {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-inline-area-form button {
+    width: 100%;
+  }
+
+  .area-chip-list.compact {
+    max-height: none;
+  }
+
+  .catalog-board > *:nth-child(4),
+  .catalog-grid > *:nth-child(4),
+  .setup-catalog-grid > *:nth-child(4),
+  .category-manager-grid > *:nth-child(4) {
+    max-height: none !important;
+  }
+}
