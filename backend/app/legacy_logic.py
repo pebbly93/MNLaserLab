@@ -2080,15 +2080,43 @@ def _quote_price_value(quote):
 
 def quote_customer_html(db, quote_id):
     quote = get_quote(db, quote_id)
-    result = quote.get("result") or {}
+    settings = get_pdf_settings(db)
+
+    company = settings.get("company_name", "MN Laser Lab") or "MN Laser Lab"
+    author = settings.get("author", "Filippo Lolli") or "Filippo Lolli"
+    email = settings.get("email", "filippololli1@gmail.com") or "filippololli1@gmail.com"
+    phone = settings.get("phone", "") or ""
+    address = settings.get("address", "") or ""
+    website = settings.get("website", "") or ""
+    vat = settings.get("vat", "") or ""
+    color = settings.get("primary_color", "#058482") or "#058482"
+    footer = settings.get("footer", "Creazioni artigianali in legno e taglio laser") or "Creazioni artigianali in legno e taglio laser"
+    terms = settings.get("terms", "Il preventivo è valido salvo disponibilità materiali e conferma finale della lavorazione.") or ""
+    intro = settings.get("intro_text", "") or ""
+    logo = settings.get("logo_data_url", "") or ""
+
+    if not logo:
+        logo = (
+            "data:image/svg+xml;utf8,"
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'>"
+            "<rect width='180' height='180' rx='38' fill='%23ffffff'/>"
+            "<circle cx='90' cy='90' r='68' fill='%23f8fafc' stroke='%23058482' stroke-width='7'/>"
+            "<text x='90' y='86' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='39' font-weight='900' fill='%230f172a'>MN</text>"
+            "<text x='90' y='116' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='14' font-weight='800' fill='%23058482'>LASER LAB</text>"
+            "</svg>"
+        )
+
+    contact_bits = [x for x in [author, email, phone, address, website, vat] if str(x or "").strip()]
+    contact_line = " · ".join(contact_bits)
 
     title = quote.get("name") or "Preventivo"
     customer = quote.get("customer") or "Cliente"
-    notes = quote.get("notes") or quote.get("description") or ""
+    notes = quote.get("notes") or quote.get("description") or intro or "Realizzazione personalizzata secondo specifiche concordate."
     price = _quote_price_value(quote)
     date = quote.get("date") or today_str()
     validity_days = business_settings(db).get("quote_validity_days", 15)
     quote_id_value = quote.get("id", quote_id)
+    project_fee = parse_float(quote.get("project_fee"))
 
     rows_html = ""
     public_rows = quote.get("rows", []) or []
@@ -2112,14 +2140,13 @@ def quote_customer_html(db, quote_id):
         rows_html = """
           <tr>
             <td>
-              <b>Realizzazione personalizzata MN Laser Lab</b>
+              <b>Realizzazione personalizzata</b>
               <small>Lavorazione secondo specifiche concordate</small>
             </td>
             <td class="right">1</td>
           </tr>
         """
 
-    project_fee = parse_float(quote.get("project_fee"))
     project_fee_row = ""
     if project_fee > 0:
         project_fee_row = f"""
@@ -2140,15 +2167,21 @@ def quote_customer_html(db, quote_id):
   <style>
     @page {{ size: A4; margin: 16mm; }}
 
+    * {{
+      box-sizing: border-box;
+    }}
+
     body {{
       font-family: Arial, Helvetica, sans-serif;
       color: #0f172a;
       margin: 0;
-      background: #eef2f7;
+      background: #e5e7eb;
+      padding: 34px 0 44px;
+      -webkit-font-smoothing: antialiased;
     }}
 
     .page {{
-      max-width: 860px;
+      width: min(920px, calc(100vw - 64px));
       margin: 0 auto;
       background: #ffffff;
       border-radius: 24px;
@@ -2161,9 +2194,29 @@ def quote_customer_html(db, quote_id):
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 28px;
       align-items: start;
-      border-bottom: 3px solid #058482;
+      border-bottom: 3px solid {color};
       padding-bottom: 22px;
       margin-bottom: 26px;
+    }}
+
+    .brand {{
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-width: 0;
+    }}
+
+    .logo {{
+      width: 78px;
+      height: 78px;
+      border-radius: 18px;
+      object-fit: contain;
+      flex: 0 0 auto;
+      display: block;
+    }}
+
+    .brand-text {{
+      min-width: 0;
     }}
 
     .brand h1 {{
@@ -2178,7 +2231,8 @@ def quote_customer_html(db, quote_id):
       margin: 6px 0 0;
       color: #64748b;
       font-size: 13px;
-      line-height: 1.4;
+      line-height: 1.42;
+      font-weight: 600;
     }}
 
     .doc-badge {{
@@ -2190,7 +2244,7 @@ def quote_customer_html(db, quote_id):
 
     .doc-badge b {{
       display: block;
-      color: #058482;
+      color: {color};
       font-size: 22px;
       margin-bottom: 6px;
       letter-spacing: -0.035em;
@@ -2205,7 +2259,7 @@ def quote_customer_html(db, quote_id):
       display: grid;
       grid-template-columns: minmax(0, 1.3fr) minmax(240px, .7fr);
       gap: 18px;
-      margin-bottom: 18px;
+      margin-bottom: 20px;
     }}
 
     .box {{
@@ -2322,6 +2376,7 @@ def quote_customer_html(db, quote_id):
     .right {{
       text-align: right;
       white-space: nowrap;
+      width: 190px;
     }}
 
     .project-row td {{
@@ -2329,13 +2384,13 @@ def quote_customer_html(db, quote_id):
     }}
 
     .project-row b {{
-      color: #058482;
+      color: {color};
     }}
 
     .total-card {{
       margin-top: 22px;
       border-radius: 22px;
-      background: linear-gradient(135deg, #058482, #0f766e);
+      background: linear-gradient(135deg, {color}, #0f766e);
       color: white;
       padding: 24px;
       display: grid;
@@ -2396,7 +2451,7 @@ def quote_customer_html(db, quote_id):
       right: 20px;
       top: 20px;
       border: 0;
-      background: #058482;
+      background: {color};
       color: white;
       border-radius: 999px;
       padding: 12px 18px;
@@ -2409,11 +2464,13 @@ def quote_customer_html(db, quote_id):
     @media print {{
       body {{
         background: white;
+        padding: 0;
         print-color-adjust: exact;
         -webkit-print-color-adjust: exact;
       }}
 
       .page {{
+        width: 100%;
         max-width: none;
         margin: 0;
         padding: 0;
@@ -2434,9 +2491,12 @@ def quote_customer_html(db, quote_id):
   <main class="page">
     <section class="header">
       <div class="brand">
-        <h1>MN Laser Lab</h1>
-        <p>Creazioni artigianali in legno · Taglio e incisione laser</p>
-        <p>Filippo Lolli · filippololli1@gmail.com</p>
+        <img class="logo" src="{logo}" alt="Logo MN Laser Lab">
+        <div class="brand-text">
+          <h1>{_html_escape(company)}</h1>
+          <p>{_html_escape(footer)}</p>
+          <p>{_html_escape(contact_line)}</p>
+        </div>
       </div>
 
       <div class="doc-badge">
@@ -2450,7 +2510,7 @@ def quote_customer_html(db, quote_id):
       <div class="box">
         <span class="label">Oggetto preventivo</span>
         <h2>{_html_escape(title)}</h2>
-        <div class="notes">{_html_escape(notes or "Realizzazione personalizzata secondo specifiche concordate.")}</div>
+        <div class="notes">{_html_escape(notes)}</div>
       </div>
 
       <div class="box soft-box">
@@ -2489,18 +2549,18 @@ def quote_customer_html(db, quote_id):
     </section>
 
     <section class="terms">
-      Il preventivo è valido salvo disponibilità materiali e conferma finale della lavorazione.
+      {_html_escape(terms)}
     </section>
 
     <section class="footer">
-      <span>Preventivo generato con MN Laser Lab Manager.</span>
+      <span>{_html_escape(company)} - {_html_escape(footer)}</span>
       <span>Il presente documento non include dettagli interni di costo.</span>
     </section>
   </main>
 </body>
 </html>"""
 
-    return apply_pdf_brand_to_html(db, html, 'customer', quote)
+    return html
 
 def quote_internal_html(db, quote_id):
     quote = get_quote(db, quote_id)
@@ -3377,7 +3437,7 @@ def apply_pdf_brand_to_html(db, html, kind="customer", quote=None):
             1
         )
 
-    if project_fee > 0 and "pdf-project-fee" not in html:
+    if project_fee > 0 and "Spese di progetto" not in html and "pdf-project-fee" not in html:
         project_fee_html = f"""
         <div class="pdf-project-fee">
           <div>
