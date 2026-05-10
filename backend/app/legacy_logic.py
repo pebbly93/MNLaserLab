@@ -3806,37 +3806,46 @@ def delete_catalog_area(db, name):
     if not name:
         raise ValueError("Area non valida")
 
-    # Non eliminare se usata in materiali/componenti/fornitori/categorie.
     used = False
 
+    # Materiali/componenti realmente collegati all'area.
     for section_key in ["materials", "components"]:
         for item in (db.get(section_key, {}) or {}).values():
             if isinstance(item, dict) and str(item.get("section", "")).strip() == name:
                 used = True
 
+    # Fornitori realmente collegati all'area.
     for supplier in (db.get("suppliers", {}) or {}).values():
         if isinstance(supplier, dict):
             if name in list(supplier.get("sections", []) or []):
                 used = True
+
             for link in list(supplier.get("links", []) or []):
                 if isinstance(link, dict) and str(link.get("section", "")).strip() == name:
                     used = True
 
-    categories = db.get("categories", {}) or {}
-    if name in categories:
+    # Categorie figlie reali.
+    # La sola chiave categories[name] vuota NON deve bloccare l'eliminazione.
+    categories = db.setdefault("categories", {})
+    area_categories = categories.get(name, {})
+
+    if isinstance(area_categories, dict) and len(area_categories.keys()) > 0:
+        used = True
+    elif isinstance(area_categories, list) and len(area_categories) > 0:
+        used = True
+    elif area_categories and not isinstance(area_categories, (dict, list)):
         used = True
 
     if used:
-        raise ValueError("Area già usata: non può essere eliminata")
+        raise ValueError("Area già usata: elimina prima categorie, materiali o collegamenti fornitori")
 
-    areas = [x for x in get_catalog_areas(db) if x != name]
+    areas = [x for x in get_catalog_areas(db) if str(x or "").strip() != name]
     db["catalog_areas"] = areas
 
-    # Se esiste come chiave vuota in categories, rimuovila.
-    db.setdefault("categories", {}).pop(name, None)
+    # Ora posso rimuovere anche la chiave vuota dalle categorie.
+    categories.pop(name, None)
 
     return {"ok": True, "areas": areas}
-
 
 def get_wood_treatments(db):
     treatments = db.setdefault("wood_treatments", [])
