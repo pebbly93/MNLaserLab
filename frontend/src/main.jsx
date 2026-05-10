@@ -709,6 +709,15 @@ function Quote({ toast }) {
     }
   }
 
+  function openQuotePdf(q, type = 'customer') {
+    if (!q?.id) {
+      toast('Salva prima il preventivo', 'err');
+      return;
+    }
+    const url = `/api/quotes/${encodeURIComponent(q.id)}/pdf/${type}`;
+    window.open(url, '_blank');
+  }
+
   const costLabels = {
     hours: 'Ore lavoro', rate: 'Tariffa €/h', packaging: 'Imballaggio €', energy: 'Energia €', wear: 'Usura macchina €', commission: 'Commissioni %', margin: 'Margine %', discount: 'Sconto %'
   };
@@ -798,6 +807,8 @@ function Quote({ toast }) {
         { key: 'status', label: 'Stato', render: r => <span className={`quote-status ${r.status || 'draft'}`}>{r.status_label || r.status || 'bozza'}</span> },
         { key: 'value', label: 'Valore', render: r => money(r.potential_value || r.recommended || r.discounted) },
         { key: 'act', label: 'Azioni', render: r => <div className="table-actions">
+          <button className="ghost" onClick={() => openQuotePdf(r, 'customer')}>PDF cliente</button>
+          <button className="ghost" onClick={() => openQuotePdf(r, 'internal')}>PDF interno</button>
           <button className="ghost" onClick={() => changeQuoteStatus(r, 'sent')}>Inviato</button>
           <button className="ghost" onClick={() => changeQuoteStatus(r, 'accepted')}>Accettato</button>
           <button className="ghost" onClick={() => changeQuoteStatus(r, 'rejected')}>Rifiutato</button>

@@ -724,3 +724,22 @@ def delete_catalog_typology_api(category: str, subcategory: str, value: str):
 @app.delete("/api/product-links")
 def delete_product_link_api(category: str, subcategory: str, collection: str):
     return mutate(delete_product_collection_link, category, subcategory, collection)
+
+
+from fastapi.responses import HTMLResponse
+
+
+@app.get("/api/quotes/{quote_id:path}/pdf/customer", response_class=HTMLResponse)
+def quote_customer_pdf_api(quote_id: str):
+    try:
+        return HTMLResponse(quote_customer_html(load_db(), quote_id))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@app.get("/api/quotes/{quote_id:path}/pdf/internal", response_class=HTMLResponse)
+def quote_internal_pdf_api(quote_id: str):
+    try:
+        return HTMLResponse(quote_internal_html(load_db(), quote_id))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
