@@ -315,18 +315,18 @@ function Materials({ toast }) {
   return <>
     <PageTitle title="Acquisti" desc="Gestisci materie prime e componenti acquistati: fornitore, categoria, sottocategoria, formato, costo e stock." />
     <ErrorBox msg={error} />
-    <Card title="Acquisto rapido" icon={PackagePlus} sub="Compila da sinistra a destra: i suggerimenti cambiano in base a sezione e categoria." action={<button className="primary" form="purchase"><Save /> Salva acquisto</button>}>
+    <Card title="Acquisto rapido" icon={PackagePlus}  action={<button className="primary" form="purchase"><Save /> Salva acquisto</button>}>
       <form id="purchase" onSubmit={add} className="form-grid buy-grid">
         <Select label="Area" value={f.section} onChange={e => setF({ ...f, section: e.target.value, supplier: '', category: '', subcategory: '', size: '', thickness: '' })}>{list(opt.raw_sections).map(x => <option key={x}>{x}</option>)}</Select>
-        <SmartInput label="Fornitore" options={suppliersForRaw(sug, f.section, f.category, f.subcategory)} value={f.supplier} onChange={e => setF({ ...f, supplier: e.target.value, category: '', subcategory: '', size: '', thickness: '' })} hint="Se scegli un fornitore già collegato, categorie e sottocategorie vengono filtrate su quel fornitore" />
-        <SmartInput label="Categoria" placeholder="Legname, Acrilico, LED..." options={rawCatsForSupplierStrict(sug, f.supplier, f.section)} value={f.category} onChange={e => setF({ ...f, category: e.target.value, subcategory: '', size: '', thickness: '' })} hint={f.section ? `Categorie disponibili per ${f.section}` : 'Scegli prima l’area'} />
-        <SmartInput label="Sottocategoria" placeholder="Betulla, Pioppo, Strisce LED..." options={rawSubsForSupplierStrict(sug, f.supplier, f.section, f.category)} value={f.subcategory} onChange={e => setF({ ...f, subcategory: e.target.value, size: '' })} hint={f.category ? `Sottocategorie di ${f.category}` : 'Scegli prima una categoria'} />
+        <SmartInput label="Fornitore" options={suppliersForRaw(sug, f.section, f.category, f.subcategory)} value={f.supplier} onChange={e => setF({ ...f, supplier: e.target.value, category: '', subcategory: '', size: '', thickness: '' })}  />
+        <SmartInput label="Categoria" placeholder="Legname, Acrilico..." options={rawCatsForSupplierStrict(sug, f.supplier, f.section)} value={f.category} onChange={e => setF({ ...f, category: e.target.value, subcategory: '', size: '', thickness: '' })}  />
+        <SmartInput label="Sottocategoria" placeholder="Betulla, Pioppo..." options={rawSubsForSupplierStrict(sug, f.supplier, f.section, f.category)} value={f.subcategory} onChange={e => setF({ ...f, subcategory: e.target.value, size: '' })}  />
         <SmartInput label="Formato / tipo" options={unique([...formats(sug, f.category), ...typologies(sug, f.category, f.subcategory)])} value={f.size} onChange={e => setF({ ...f, size: e.target.value })} />
         <SmartInput label="Spessore" options={thicknesses(sug, f.category)} value={f.thickness} onChange={e => setF({ ...f, thickness: e.target.value })} />
         <SmartInput label="Unità" options={sug.units} value={f.unit} onChange={e => setF({ ...f, unit: e.target.value })} />
         <Input label="Quantità" type="number" step="0.01" value={f.quantity} onChange={e => setF({ ...f, quantity: e.target.value })} />
         <Input label="Costo totale €" type="number" step="0.01" value={f.total_cost} onChange={e => setF({ ...f, total_cost: e.target.value })} />
-        <div className="name-preview"><span>Nome articolo</span><b>{generated || 'Si genera automaticamente'}</b><small>{f.supplier ? `collegato a ${f.supplier}` : 'aggiungi fornitore per tracciabilità'}</small></div>
+        <div className="name-preview"><span>Nome articolo</span><b>{generated || 'Si genera automaticamente'}</b><small>{f.supplier || '—'}</small></div>
       </form>
     </Card>
     <div className="stats inventory-quality">
@@ -1600,8 +1600,8 @@ function People({ toast }) {
         <form id="supplier-form" onSubmit={saveSupplier} className="form-grid">
           <SmartInput label="Nome fornitore" options={sug.suppliers} value={supplier.name} onChange={e=>setSupplier({...supplier,name:e.target.value})}/>
           <Select label="Area collegata" value={supplier.section} onChange={e=>setSupplier({...supplier,section:e.target.value,category:'',subcategory:''})}>{list(opt.raw_sections).map(x=><option key={x}>{x}</option>)}</Select>
-          <SmartInput label="Categoria fornita" options={rawCats(sug, supplier.section)} value={supplier.category} onChange={e=>setSupplier({...supplier,category:e.target.value,subcategory:''})} hint="Esempio: Legname, Acrilico, LED, Vernici"/>
-          <SmartInput label="Sottocategoria fornita" options={rawSubs(sug, supplier.section, supplier.category)} value={supplier.subcategory} onChange={e=>setSupplier({...supplier,subcategory:e.target.value})} hint="Esempio: Betulla, Pioppo, Strisce LED"/>
+          <SmartInput label="Categoria fornita" options={rawCats(sug, supplier.section)} value={supplier.category} onChange={e=>setSupplier({...supplier,category:e.target.value,subcategory:''})} />
+          <SmartInput label="Sottocategoria fornita" options={rawSubs(sug, supplier.section, supplier.category)} value={supplier.subcategory} onChange={e=>setSupplier({...supplier,subcategory:e.target.value})} />
         </form>
       </Card>
       <Card title="Nuovo cliente" icon={Users} sub="Usa i clienti per preventivi, vendite e storico lavori personalizzati." action={<button className="primary" form="customer-form"><Save /> Salva cliente</button>}>
