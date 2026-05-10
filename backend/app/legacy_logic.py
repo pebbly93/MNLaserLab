@@ -2310,7 +2310,7 @@ def quote_customer_html(db, quote_id):
   </main>
 </body>
 </html>"""
-    return apply_pdf_brand_to_html(db, html, 'customer')
+    return apply_pdf_brand_to_html(db, html, 'customer', quote)
 
 
 def quote_internal_html(db, quote_id):
@@ -2500,7 +2500,7 @@ def quote_internal_html(db, quote_id):
   </main>
 </body>
 </html>"""
-    return apply_pdf_brand_to_html(db, html, 'internal')
+    return apply_pdf_brand_to_html(db, html, 'internal', quote)
 
 
 # ---------------------------------------------------------------------------
@@ -3085,62 +3085,74 @@ def _pdf_brand_css(db):
 # v40.7.2b - Applicazione sicura modello PDF senza doppia intestazione
 # ---------------------------------------------------------------------------
 
-def apply_pdf_brand_to_html(db, html, kind="customer"):
+def apply_pdf_brand_to_html(db, html, kind="customer", quote=None):
     settings = get_pdf_settings(db)
+    quote = quote or {}
 
     company = settings.get("company_name", "MN Laser Lab") or "MN Laser Lab"
-    author = settings.get("author", "") or ""
-    email = settings.get("email", "") or ""
+    author = settings.get("author", "Filippo Lolli") or "Filippo Lolli"
+    email = settings.get("email", "filippololli1@gmail.com") or "filippololli1@gmail.com"
     phone = settings.get("phone", "") or ""
     address = settings.get("address", "") or ""
     website = settings.get("website", "") or ""
     vat = settings.get("vat", "") or ""
     color = settings.get("primary_color", "#058482") or "#058482"
-    footer = settings.get("footer", "") or ""
+    footer = settings.get("footer", "MN Laser Lab - Creazioni artigianali in legno e taglio laser") or ""
     terms = settings.get("terms", "") or ""
     intro = settings.get("intro_text", "") or ""
     logo = settings.get("logo_data_url", "") or ""
 
+    project_fee = parse_float(quote.get("project_fee"))
+
+    # Logo fallback MN se non è stato caricato un logo nelle impostazioni.
+    if not logo:
+        logo = (
+            "data:image/svg+xml;utf8,"
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'>"
+            "<rect width='160' height='160' rx='34' fill='%23f8fafc'/>"
+            "<circle cx='80' cy='80' r='62' fill='white' stroke='%23058482' stroke-width='6'/>"
+            "<text x='80' y='76' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='34' font-weight='900' fill='%230f172a'>MN</text>"
+            "<text x='80' y='103' text-anchor='middle' font-family='Arial, Helvetica, sans-serif' font-size='13' font-weight='700' fill='%23058482'>LASER LAB</text>"
+            "</svg>"
+        )
+
     contact_bits = [x for x in [author, email, phone, address, website, vat] if str(x or "").strip()]
     contact_line = " · ".join(contact_bits)
 
-    # Rimuove residui di eventuali iniezioni vecchie.
+    # Pulizia residui patch precedenti.
     html = html.replace("{_pdf_brand_css(db)}", "")
     html = html.replace("{_pdf_brand_block(db)}", "")
 
-    # Colore brand.
+    # Sostituzioni dinamiche.
     html = html.replace("#058482", color)
-
-    # Nome azienda.
     html = html.replace("MN Laser Lab", company)
 
-    # Sostituzioni robuste delle righe contatto vecchie/hardcoded.
-    old_contact_variants = [
+    old_contacts = [
         "Filippo Lolli - filippololli1@gmail.com",
         "Filippo Lolli · filippololli1@gmail.com",
         "Filippo Lolli - filippololli@gmail.com",
         "Filippo Lolli · filippololli@gmail.com",
+        "Mauro Nocco · mnlaserlab@gmail.com",
+        "Mauro Nocco - mnlaserlab@gmail.com",
+        "mnlaserlab@gmail.com",
         "filippololli@gmail.com",
         "filippololli1@gmail.com",
     ]
 
-    for old in old_contact_variants:
-        if old in html:
-            html = html.replace(old, contact_line or old)
+    for old in old_contacts:
+        html = html.replace(old, contact_line or old)
 
-    # Sostituisce payoff/descrizione storica, se presente.
-    old_subtitle_variants = [
+    old_subtitles = [
         "Creazioni artigianali in legno · Taglio e incisione laser",
         "Creazioni artigianali in legno - Taglio e incisione laser",
         "Creazioni artigianali in legno e taglio laser",
+        "MN Laser Lab - Creazioni artigianali in legno e taglio laser",
     ]
 
-    business_subtitle = settings.get("business_subtitle", "") or settings.get("footer", "") or ""
-    if business_subtitle:
-        for old in old_subtitle_variants:
-            html = html.replace(old, business_subtitle)
+    business_subtitle = footer or "Creazioni artigianali in legno e taglio laser"
+    for old in old_subtitles:
+        html = html.replace(old, business_subtitle)
 
-    # Testo introduttivo, condizioni e footer.
     if intro:
         html = html.replace(
             "Grazie per averci contattato. Di seguito trovi il riepilogo del preventivo richiesto.",
@@ -3156,7 +3168,24 @@ def apply_pdf_brand_to_html(db, html, kind="customer"):
     if footer:
         html = html.replace("Preventivo generato con MN Laser Lab Manager.", footer)
 
-    # Se non siamo riusciti a sostituire una riga contatto, la aggiungiamo sotto il nome azienda.
+    # Rimuove eventuale testata duplicata nata dalle patch precedenti.
+    html = re.sub(
+        r"<div class=['\"]brand-head['\"].*?</div>\s*</div>",
+        "",
+        html,
+        flags=re.DOTALL
+    )
+
+    # Inserisce il logo nella testata esistente.
+    if "pdf-brand-logo-inline" not in html:
+        logo_html = f"<img class='pdf-brand-logo-inline' src='{logo}' alt='Logo MN Laser Lab' />"
+        html = html.replace(
+            f"<h1>{company}</h1>",
+            f"<div class='pdf-brand-title-row'>{logo_html}<div><h1>{company}</h1><p class='pdf-dynamic-contact'>{contact_line}</p></div></div>",
+            1
+        )
+
+    # Se il contatto non è entrato, lo aggiunge sotto il titolo.
     if contact_line and contact_line not in html:
         html = html.replace(
             f"<h1>{company}</h1>",
@@ -3164,35 +3193,151 @@ def apply_pdf_brand_to_html(db, html, kind="customer"):
             1
         )
 
-    # Logo dentro la testata esistente, non come seconda intestazione.
-    if logo and "pdf-brand-logo-inline" not in html:
-        logo_html = f"<img class='pdf-brand-logo-inline' src='{logo}' alt='Logo' />"
-        html = html.replace(
-            f"<h1>{company}</h1>",
-            f"<div class='pdf-brand-title-row'>{logo_html}<h1>{company}</h1></div>",
-            1
-        )
+    # Spese di progetto: voce separata nel PDF solo se > 0.
+    if project_fee > 0 and "pdf-project-fee" not in html:
+        project_fee_html = f"""
+        <div class="pdf-project-fee">
+          <span>Spese di progetto</span>
+          <strong>€ {project_fee:.2f}</strong>
+        </div>
+        """
 
+        if "Totale preventivo" in html:
+            html = html.replace("Totale preventivo", project_fee_html + "\nTotale preventivo", 1)
+        else:
+            html = html.replace("</body>", project_fee_html + "\n</body>", 1)
+
+    # CSS professionale PDF.
     extra_css = f"""
     <style>
-      :root {{ --brand: {color}; }}
+      :root {{
+        --brand: {color};
+        --ink: #0f172a;
+        --muted: #64748b;
+        --line: #e2e8f0;
+        --soft: #f8fafc;
+      }}
+
+      body {{
+        background: #f1f5f9 !important;
+        color: var(--ink) !important;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif !important;
+        margin: 0 !important;
+        padding: 34px 0 44px !important;
+      }}
+
+      .page, main, .document, .quote-page {{
+        width: min(920px, calc(100vw - 64px)) !important;
+        margin: 0 auto !important;
+        background: #ffffff !important;
+      }}
+
       .pdf-brand-title-row {{
-        display: flex;
-        align-items: center;
-        gap: 14px;
+        display: flex !important;
+        align-items: center !important;
+        gap: 16px !important;
       }}
+
       .pdf-brand-logo-inline {{
-        max-width: 76px;
-        max-height: 56px;
-        object-fit: contain;
-        display: block;
+        width: 74px !important;
+        height: 74px !important;
+        object-fit: contain !important;
+        display: block !important;
+        flex: 0 0 auto !important;
       }}
+
       .pdf-dynamic-contact {{
-        margin: 4px 0;
-        color: #475569;
-        font-size: 13px;
+        margin: 5px 0 0 !important;
+        color: var(--muted) !important;
+        font-size: 13px !important;
+        line-height: 1.35 !important;
+        font-weight: 600 !important;
       }}
+
+      h1 {{
+        margin: 0 !important;
+        font-size: 28px !important;
+        line-height: 1.05 !important;
+        letter-spacing: -0.04em !important;
+      }}
+
+      h2, h3 {{
+        letter-spacing: -0.025em !important;
+      }}
+
+      table {{
+        width: 100% !important;
+        border-collapse: collapse !important;
+        table-layout: fixed !important;
+      }}
+
+      th {{
+        background: #f1f5f9 !important;
+        color: #475569 !important;
+        font-size: 11px !important;
+        text-transform: uppercase !important;
+        letter-spacing: .06em !important;
+        padding: 12px 13px !important;
+      }}
+
+      td {{
+        padding: 13px !important;
+        border-bottom: 1px solid #e5e7eb !important;
+        color: #1e293b !important;
+        font-size: 13px !important;
+        line-height: 1.35 !important;
+      }}
+
+      td:last-child,
+      th:last-child,
+      .right {{
+        text-align: right !important;
+      }}
+
+      .pdf-project-fee {{
+        margin: 18px 0 10px !important;
+        border: 1px solid rgba(5, 132, 130, .22) !important;
+        background: linear-gradient(135deg, rgba(5,132,130,.08), rgba(5,132,130,.03)) !important;
+        border-radius: 16px !important;
+        padding: 15px 18px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 18px !important;
+        color: var(--ink) !important;
+      }}
+
+      .pdf-project-fee span {{
+        font-size: 13px !important;
+        font-weight: 800 !important;
+        color: #334155 !important;
+      }}
+
+      .pdf-project-fee strong {{
+        font-size: 22px !important;
+        color: var(--brand) !important;
+      }}
+
+      .print-button,
+      .print-actions,
+      button {{
+        position: fixed;
+        top: 24px;
+        right: 24px;
+      }}
+
       @media print {{
+        body {{
+          background: white !important;
+          padding: 0 !important;
+        }}
+
+        .page, main, .document, .quote-page {{
+          width: 100% !important;
+          margin: 0 !important;
+          box-shadow: none !important;
+        }}
+
         .print-button, .print-actions, button {{
           display: none !important;
         }}
@@ -3204,12 +3349,6 @@ def apply_pdf_brand_to_html(db, html, kind="customer"):
         html = html.replace("</head>", extra_css + "\n</head>", 1)
 
     return html
-
-
-
-# ---------------------------------------------------------------------------
-# v40.8.0 - Preventivo accettato → workflow prodotto/vendita
-# ---------------------------------------------------------------------------
 
 def quote_register_sale(db, quote_id, payload=None):
     payload = payload or {}
