@@ -1,6 +1,6 @@
 {
   "name": "mn-laser-lab-manager-desktop",
-  "version": "39.6.1",
+  "version": "39.7.0",
   "description": "MN Laser Lab Manager Desktop - Electron + FastAPI + React",
   "author": "Filippo Lolli <filippololli1@gmail.com>",
   "private": true,
