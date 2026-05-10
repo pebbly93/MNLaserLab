@@ -275,6 +275,51 @@ function loadErrorPage(title, details) {
   );
 }
 
+
+
+// v41.0.0 - Gestione popup/PDF in Electron.
+// Evita che window.open blocchi o rompa la UI principale.
+function installWindowOpenHandler(win) {
+  if (!win || !win.webContents) return;
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const { shell } = require("electron");
+
+      // PDF/HTML generati dal backend locale: aprili in una nuova finestra Electron.
+      if (
+        url.startsWith("http://127.0.0.1:") ||
+        url.startsWith("http://localhost:") ||
+        url.includes("/api/quote-pdf/") ||
+        url.includes("/api/quotes/")
+      ) {
+        return {
+          action: "allow",
+          overrideBrowserWindowOptions: {
+            width: 980,
+            height: 900,
+            title: "Documento MN Laser Lab",
+            autoHideMenuBar: true,
+            webPreferences: {
+              nativeWindowOpen: true,
+              contextIsolation: true,
+              nodeIntegration: false,
+              webSecurity: true,
+            },
+          },
+        };
+      }
+
+      // Link esterni: browser predefinito.
+      shell.openExternal(url);
+      return { action: "deny" };
+    } catch (e) {
+      console.error("Errore apertura popup:", e);
+      return { action: "allow" };
+    }
+  });
+}
+
 function createWindow(backendReady) {
   const iconPath = appIconPath();
 
@@ -288,6 +333,11 @@ function createWindow(backendReady) {
     icon: iconPath,
     show: false,
     webPreferences: {
+      // v41.0.0 electron window stability
+      nativeWindowOpen: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
@@ -340,7 +390,11 @@ function createWindow(backendReady) {
   if (fs.existsSync(indexPath)) {
     mainWindow.loadFile(indexPath);
   } else if (backendReady) {
-    mainWindow.loadURL(APP_URL);
+    mainWindow.loadURL(APP_URL)
+  if (process.env.MN_DEBUG_ELECTRON === "1") {
+    try { mainWindow.webContents.openDevTools({ mode: "detach" }); } catch (e) {}
+  }
+;
   } else {
     loadErrorPage(
       "Frontend non trovato",
