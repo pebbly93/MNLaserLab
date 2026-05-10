@@ -1220,3 +1220,308 @@ def debug_static_assets():
         "assets_count": len(assets),
         "assets_sample": assets,
     }
+
+
+@app.get("/api/system/status")
+def system_status_api():
+    return system_status_info(load_db())
+
+
+
+# ---------------------------------------------------------------------------
+
+from fastapi import Request
+from fastapi.responses import FileResponse, Response
+import mimetypes
+
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("image/svg+xml", ".svg")
+mimetypes.add_type("image/png", ".png")
+mimetypes.add_type("image/x-icon", ".ico")
+mimetypes.add_type("application/wasm", ".wasm")
+
+
+def browser_frontend_dist_dir():
+    here = Path(__file__).resolve()
+
+    candidates = [
+        here.parents[2] / "frontend" / "dist",
+        here.parents[1] / "frontend" / "dist",
+        Path.cwd() / "frontend" / "dist",
+        Path.cwd() / "dist",
+        Path.cwd() / "resources" / "frontend" / "dist",
+        Path.cwd() / "resources" / "app" / "frontend" / "dist",
+        Path(getattr(sys, "_MEIPASS", "")) / "frontend" / "dist" if hasattr(sys, "_MEIPASS") else None,
+    ]
+
+    for p in candidates:
+        if not p:
+            continue
+        try:
+            if p.exists() and (p / "index.html").exists():
+                return p
+        except Exception:
+            pass
+
+    return None
+
+
+
+@app.get("/mn_laser_lab_logo.png")
+def browser_logo_png():
+    dist = browser_frontend_dist_dir()
+    if dist and (dist / "mn_laser_lab_logo.png").exists():
+        return FileResponse(dist / "mn_laser_lab_logo.png", media_type="image/png")
+
+    return Response("logo not found", status_code=404, media_type="text/plain")
+
+
+@app.get("/favicon.ico")
+def browser_favicon():
+    dist = browser_frontend_dist_dir()
+    if dist and (dist / "favicon.ico").exists():
+        return FileResponse(dist / "favicon.ico", media_type="image/x-icon")
+
+    return Response(status_code=204)
+
+
+
+
+# ---------------------------------------------------------------------------
+
+def safe_browser_frontend_dist_dir():
+    import sys
+    from pathlib import Path
+
+    here = Path(__file__).resolve()
+
+    candidates = [
+        here.parents[2] / "frontend" / "dist",
+        here.parents[1] / "frontend" / "dist",
+        Path.cwd() / "frontend" / "dist",
+        Path.cwd() / "dist",
+        Path.cwd() / "resources" / "frontend" / "dist",
+        Path.cwd() / "resources" / "app" / "frontend" / "dist",
+    ]
+
+    if hasattr(sys, "_MEIPASS"):
+        candidates.append(Path(sys._MEIPASS) / "frontend" / "dist")
+        candidates.append(Path(sys._MEIPASS) / "dist")
+
+    checked = []
+
+    for p in candidates:
+        try:
+            checked.append(str(p))
+            if p.exists() and (p / "index.html").exists():
+                return p, checked
+        except Exception as e:
+            checked.append(f"{p} -> ERROR {e}")
+
+    return None, checked
+
+
+
+@app.get("/browser-health")
+def browser_health_api():
+    return {"ok": True, "mode": "browser-edition", "route": "browser-health"}
+
+# ---------------------------------------------------------------------------
+# v42.0.4 - Single safe frontend route for Browser Edition
+# ---------------------------------------------------------------------------
+
+def mn_browser_dist():
+    import sys
+    from pathlib import Path
+
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[2] / "frontend" / "dist",
+        here.parents[1] / "frontend" / "dist",
+        Path.cwd() / "frontend" / "dist",
+        Path.cwd() / "dist",
+    ]
+
+    if hasattr(sys, "_MEIPASS"):
+        candidates += [
+            Path(sys._MEIPASS) / "frontend" / "dist",
+            Path(sys._MEIPASS) / "dist",
+        ]
+
+    checked = []
+    for p in candidates:
+        try:
+            checked.append(str(p))
+            if p.exists() and (p / "index.html").exists():
+                return p, checked
+        except Exception as e:
+            checked.append(f"{p} ERROR {e}")
+
+    return None, checked
+
+
+@app.get("/api/debug/browser-dist")
+def mn_debug_browser_dist():
+    dist, checked = mn_browser_dist()
+    assets = []
+    if dist and (dist / "assets").exists():
+        assets = sorted([p.name for p in (dist / "assets").glob("*")])
+
+    return {
+        "ok": True,
+        "dist_found": bool(dist),
+        "dist": str(dist) if dist else None,
+        "checked": checked,
+        "assets_count": len(assets),
+        "assets_sample": assets[:30],
+    }
+
+
+@app.get("/assets/{asset_path:path}")
+def mn_browser_assets(asset_path: str):
+    from fastapi.responses import FileResponse, Response
+    import mimetypes
+
+    mimetypes.add_type("application/javascript", ".js")
+    mimetypes.add_type("text/css", ".css")
+
+    dist, checked = mn_browser_dist()
+    if not dist:
+        return Response("frontend/dist non trovato\n" + "\n".join(checked), status_code=404, media_type="text/plain")
+
+    file_path = (dist / "assets" / asset_path).resolve()
+    assets_dir = (dist / "assets").resolve()
+
+    try:
+        file_path.relative_to(assets_dir)
+    except Exception:
+        return Response("invalid asset path", status_code=403, media_type="text/plain")
+
+    if not file_path.exists():
+        return Response(f"asset not found: {asset_path}", status_code=404, media_type="text/plain")
+
+    media_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type)
+
+
+@app.get("/")
+def mn_browser_index():
+    from fastapi.responses import FileResponse, Response
+
+    dist, checked = mn_browser_dist()
+    if not dist:
+        return Response(
+            "frontend/dist non trovato.\n\nPercorsi controllati:\n" + "\n".join(checked),
+            status_code=404,
+            media_type="text/plain",
+        )
+
+    index = dist / "index.html"
+    if not index.exists():
+        return Response(f"index.html non trovato in {dist}", status_code=404, media_type="text/plain")
+
+    return FileResponse(index, media_type="text/html")
+
+
+# ---------------------------------------------------------------------------
+# v42.0.5 - Browser Edition logo/static public files
+# ---------------------------------------------------------------------------
+
+def mn_find_public_file(filename):
+    from pathlib import Path
+    import sys
+
+    here = Path(__file__).resolve()
+
+    candidates = [
+        here.parents[2] / "frontend" / "dist" / filename,
+        here.parents[2] / "frontend" / "public" / filename,
+        here.parents[2] / "desktop" / "assets" / filename,
+        here.parents[1] / "frontend" / "dist" / filename,
+        here.parents[1] / "frontend" / "public" / filename,
+        Path.cwd() / "frontend" / "dist" / filename,
+        Path.cwd() / "frontend" / "public" / filename,
+        Path.cwd() / "desktop" / "assets" / filename,
+        Path.cwd() / filename,
+    ]
+
+    if hasattr(sys, "_MEIPASS"):
+        candidates += [
+            Path(sys._MEIPASS) / "frontend" / "dist" / filename,
+            Path(sys._MEIPASS) / "frontend" / "public" / filename,
+            Path(sys._MEIPASS) / "desktop" / "assets" / filename,
+            Path(sys._MEIPASS) / filename,
+        ]
+
+    for p in candidates:
+        try:
+            if p.exists() and p.is_file():
+                return p
+        except Exception:
+            pass
+
+    return None
+
+
+@app.get("/mn_laser_lab_logo.png")
+def mn_logo_png():
+    from fastapi.responses import FileResponse, Response
+
+    p = mn_find_public_file("mn_laser_lab_logo.png")
+    if p:
+        return FileResponse(p, media_type="image/png")
+
+    return Response("logo not found", status_code=404, media_type="text/plain")
+
+
+@app.get("/logo.png")
+def mn_logo_png_alias():
+    from fastapi.responses import FileResponse, Response
+
+    p = mn_find_public_file("mn_laser_lab_logo.png") or mn_find_public_file("logo.png")
+    if p:
+        return FileResponse(p, media_type="image/png")
+
+    return Response("logo not found", status_code=404, media_type="text/plain")
+
+
+@app.get("/favicon.ico")
+def mn_favicon_ico():
+    from fastapi.responses import FileResponse, Response
+
+    p = mn_find_public_file("favicon.ico")
+    if p:
+        return FileResponse(p, media_type="image/x-icon")
+
+    return Response(status_code=204)
+
+
+@app.get("/api/debug/logo")
+def mn_debug_logo():
+    p = mn_find_public_file("mn_laser_lab_logo.png")
+    return {
+        "ok": True,
+        "found": bool(p),
+        "path": str(p) if p else None,
+    }
+
+@app.get("/{full_path:path}")
+def mn_browser_spa(full_path: str):
+    from fastapi.responses import FileResponse, Response
+
+    if full_path.startswith("api/"):
+        return Response("api route not found", status_code=404, media_type="text/plain")
+
+    if full_path.startswith("assets/"):
+        return Response(f"asset not found: {full_path}", status_code=404, media_type="text/plain")
+
+    dist, checked = mn_browser_dist()
+    if not dist:
+        return Response(
+            "frontend/dist non trovato.\n\nPercorsi controllati:\n" + "\n".join(checked),
+            status_code=404,
+            media_type="text/plain",
+        )
+
+    return FileResponse(dist / "index.html", media_type="text/html")

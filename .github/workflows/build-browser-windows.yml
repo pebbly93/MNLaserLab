@@ -1,0 +1,64 @@
+name: Build Browser Windows
+
+on:
+  push:
+    tags:
+      - "browser-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-browser-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements_browser.txt
+
+      - name: Build browser launcher exe
+        run: |
+          pyinstaller mn_laser_lab_browser.spec --clean --noconfirm
+
+      - name: Prepare package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item dist\MN_Laser_Lab_Browser.exe package\MN_Laser_Lab_Browser.exe
+          Copy-Item Avvia_MN_Laser_Lab_Browser_Windows.bat package\Avvia_MN_Laser_Lab_Browser_Windows.bat
+          Copy-Item Avvia_MN_Laser_Lab_Browser_Windows.ps1 package\Avvia_MN_Laser_Lab_Browser_Windows.ps1
+          Copy-Item README.md package\README.txt -ErrorAction SilentlyContinue
+          Compress-Archive -Path package\* -DestinationPath MN_Laser_Lab_Browser_Windows.zip -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MN_Laser_Lab_Browser_Windows
+          path: MN_Laser_Lab_Browser_Windows.zip
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MN_Laser_Lab_Browser_Windows.zip

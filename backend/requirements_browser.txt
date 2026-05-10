@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-multipart
+reportlab
+jinja2
+pyinstaller

@@ -4011,3 +4011,51 @@ def clean_catalog_areas_list(values):
         if x not in cleaned:
             cleaned.append(x)
     return cleaned
+
+
+# ---------------------------------------------------------------------------
+# v42.0.1 - System/LAN status helpers
+# ---------------------------------------------------------------------------
+
+def system_status_info(db):
+    import os
+    import sys
+    import socket
+    import platform
+    from pathlib import Path
+    from datetime import datetime
+
+    def local_ip():
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    ip = local_ip()
+    port = int(os.environ.get("MN_BACKEND_PORT", "8000"))
+
+    return {
+        "ok": True,
+        "app": "MN Laser Lab Manager",
+        "mode": "Browser Edition / LAN Ready",
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "python": sys.version.split()[0],
+        "platform": platform.platform(),
+        "cwd": os.getcwd(),
+        "local_url": f"http://127.0.0.1:{port}/",
+        "lan_ip": ip,
+        "lan_url": f"http://{ip}:{port}/",
+        "port": port,
+        "db_counts": {
+            "materials": len(db.get("materials", {}) or {}),
+            "components": len(db.get("components", {}) or {}),
+            "products": len(db.get("products", {}) or {}),
+            "quotes": len(db.get("quotes", []) or []),
+            "customers": len(db.get("customers", {}) or {}),
+            "suppliers": len(db.get("suppliers", {}) or {}),
+        },
+    }

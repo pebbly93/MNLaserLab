@@ -6102,3 +6102,151 @@ td {
     width: 100%;
   }
 }
+
+
+/* v42.0.1 System status / LAN QR */
+.system-status-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.system-status-grid > .card:nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+.system-kpi-grid,
+.system-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.system-kpi-grid div,
+.system-counts div,
+.lan-box div {
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(255,255,255,.045);
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.system-kpi-grid span,
+.system-counts span,
+.lan-box span,
+.system-path-box span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  font-weight: 900;
+  margin-bottom: 5px;
+}
+
+.system-kpi-grid b,
+.system-counts b,
+.lan-box b {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.system-path-box {
+  margin-top: 12px;
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(15, 23, 42, .35);
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.system-path-box code {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #bae6fd;
+  font-size: 12px;
+}
+
+.lan-box {
+  display: grid;
+  gap: 10px;
+}
+
+.qr-wrap {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 10px;
+  margin: 16px 0 4px;
+}
+
+.qr-wrap img {
+  width: 210px;
+  height: 210px;
+  background: white;
+  border-radius: 18px;
+  padding: 10px;
+}
+
+.qr-wrap small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+@media (max-width: 960px) {
+  .system-status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .system-kpi-grid,
+  .system-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .system-kpi-grid,
+  .system-counts {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* v42.0.6 embedded logo fallback */
+.mn-logo-mark {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: rgba(255,255,255,.92);
+  border: 1px solid rgba(15,23,42,.08);
+  box-shadow: 0 12px 30px rgba(0,0,0,.16);
+}
+
+.mn-logo-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.sidebar .mn-logo-mark,
+.side .mn-logo-mark,
+nav .mn-logo-mark {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .mn-logo-mark {
+    width: 46px;
+    height: 46px;
+    min-width: 46px;
+    border-radius: 14px;
+  }
+}

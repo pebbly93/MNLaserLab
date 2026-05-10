@@ -2861,6 +2861,91 @@ function CommandPalette({ open, setOpen, nav, go }) {
   </div>;
 }
 
+
+function SystemStatusPanel({ toast }) {
+  const { data: status, refresh } = useApi('/system/status', {});
+  const lanUrl = status?.lan_url || '';
+  const qrUrl = lanUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(lanUrl)}` : '';
+
+  async function copyLan() {
+    try {
+      await navigator.clipboard.writeText(lanUrl);
+      toast('Link LAN copiato');
+    } catch {
+      toast(lanUrl || 'Link non disponibile');
+    }
+  }
+
+  return <div className="system-status-grid">
+    <Card title="Sistema" icon={Activity} sub="Stato runtime, backend e database locale.">
+      <div className="system-kpi-grid">
+        <div><span>Modalità</span><b>{status.mode || '—'}</b></div>
+        <div><span>Ora</span><b>{status.time || '—'}</b></div>
+        <div><span>Porta</span><b>{status.port || '—'}</b></div>
+        <div><span>Python</span><b>{status.python || '—'}</b></div>
+      </div>
+
+      <div className="system-path-box">
+        <span>Cartella runtime</span>
+        <code>{status.cwd || '—'}</code>
+      </div>
+
+      <div className="quick-actions">
+        <button className="ghost" onClick={refresh}><RefreshCw /> Aggiorna stato</button>
+      </div>
+    </Card>
+
+    <Card title="Apri su smartphone" icon={Smartphone} sub="Usa l'app da telefono o tablet sulla stessa rete Wi-Fi.">
+      <div className="lan-box">
+        <div>
+          <span>URL locale</span>
+          <b>{status.local_url || '—'}</b>
+        </div>
+        <div>
+          <span>URL rete LAN</span>
+          <b>{lanUrl || '—'}</b>
+        </div>
+      </div>
+
+      {qrUrl && <div className="qr-wrap">
+        <img src={qrUrl} alt="QR LAN MN Laser Lab" />
+        <small>Scansiona il QR dallo smartphone collegato alla stessa rete.</small>
+      </div>}
+
+      <div className="quick-actions">
+        <button className="primary" onClick={copyLan}><Copy /> Copia link LAN</button>
+      </div>
+    </Card>
+
+    <Card title="Archivio dati" icon={Database} sub="Riepilogo veloce del database locale.">
+      <div className="system-counts">
+        {Object.entries(status.db_counts || {}).map(([k,v]) => <div key={k}>
+          <span>{k}</span>
+          <b>{v}</b>
+        </div>)}
+      </div>
+    </Card>
+  </div>;
+}
+
+
+
+function MNLogoMark() {
+  return (
+    <div className="mn-logo-mark" aria-label="MN Laser Lab">
+      <svg viewBox="0 0 120 120" role="img">
+        <rect x="8" y="8" width="104" height="104" rx="26" fill="rgba(255,255,255,.96)" />
+        <circle cx="60" cy="60" r="43" fill="none" stroke="#0f172a" strokeWidth="4" opacity=".16" />
+        <path d="M25 68 L25 45 L36 45 L47 59 L58 45 L69 45 L69 75 L58 75 L58 61 L49 72 L45 72 L36 61 L36 75 L25 75 Z" fill="#0f172a"/>
+        <path d="M73 45 L94 45 L94 55 L84 55 L84 75 L73 75 Z" fill="#058482"/>
+        <path d="M30 84 C43 91 76 91 91 82" fill="none" stroke="#058482" strokeWidth="5" strokeLinecap="round"/>
+      </svg>
+    </div>
+  );
+}
+
+
+
 function App() {
   const [tab, setTab] = useState(() => localStorage.getItem('mnll_tab') === 'maintenance' ? 'settings' : (localStorage.getItem('mnll_tab') || 'studio'));
   const [mobile, setMobile] = useState(false);
