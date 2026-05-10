@@ -689,3 +689,38 @@ def product_detail_api(name: str):
         return product_detail(load_db(), name)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
+
+
+@app.post("/api/catalog/formats")
+def add_catalog_format_api(payload: Payload):
+    return mutate(add_catalog_format, payload.data)
+
+
+@app.delete("/api/catalog/formats")
+def delete_catalog_format_api(category: str, value: str):
+    return mutate(delete_catalog_format, category, value)
+
+
+@app.post("/api/catalog/thicknesses")
+def add_catalog_thickness_api(payload: Payload):
+    return mutate(add_catalog_thickness, payload.data)
+
+
+@app.delete("/api/catalog/thicknesses")
+def delete_catalog_thickness_api(category: str, value: str):
+    return mutate(delete_catalog_thickness, category, value)
+
+
+@app.post("/api/catalog/typologies")
+def add_catalog_typology_api(payload: Payload):
+    return mutate(add_catalog_typology, payload.data)
+
+
+@app.delete("/api/catalog/typologies")
+def delete_catalog_typology_api(category: str, subcategory: str, value: str):
+    return mutate(delete_catalog_typology, category, subcategory, value)
+
+
+@app.delete("/api/product-links")
+def delete_product_link_api(category: str, subcategory: str, collection: str):
+    return mutate(delete_product_collection_link, category, subcategory, collection)

@@ -1753,3 +1753,109 @@ def product_detail(db, name):
         "movements": list(reversed(movements)),
         "sales": list(reversed(sales)),
     }
+
+
+# ---------------------------------------------------------------------------
+# v39.7.0 - Catalogo avanzato formati, spessori e tipologie
+# ---------------------------------------------------------------------------
+
+def add_catalog_format(db, payload):
+    category = (payload.get("category") or "").strip()
+    value = (payload.get("value") or "").strip()
+
+    if not category or not value:
+        raise ValueError("Categoria e formato richiesti")
+
+    values = db.setdefault("formats", {}).setdefault(category, [])
+    if value not in values:
+        values.append(value)
+
+    return {"ok": True, "category": category, "value": value}
+
+
+def delete_catalog_format(db, category, value):
+    category = (category or "").strip()
+    value = (value or "").strip()
+
+    values = db.setdefault("formats", {}).setdefault(category, [])
+    if value in values:
+        values.remove(value)
+
+    return {"ok": True}
+
+
+def add_catalog_thickness(db, payload):
+    category = (payload.get("category") or "").strip()
+    value = (payload.get("value") or "").strip()
+
+    if not category or not value:
+        raise ValueError("Categoria e spessore richiesti")
+
+    values = db.setdefault("thicknesses", {}).setdefault(category, [])
+    if value not in values:
+        values.append(value)
+
+    return {"ok": True, "category": category, "value": value}
+
+
+def delete_catalog_thickness(db, category, value):
+    category = (category or "").strip()
+    value = (value or "").strip()
+
+    values = db.setdefault("thicknesses", {}).setdefault(category, [])
+    if value in values:
+        values.remove(value)
+
+    return {"ok": True}
+
+
+def add_catalog_typology(db, payload):
+    category = (payload.get("category") or "").strip()
+    subcategory = (payload.get("subcategory") or "").strip()
+    value = (payload.get("value") or "").strip()
+
+    if not category or not subcategory or not value:
+        raise ValueError("Categoria, sottocategoria e tipologia richieste")
+
+    values = db.setdefault("typologies", {}).setdefault(category, {}).setdefault(subcategory, [])
+    if value not in values:
+        values.append(value)
+
+    return {
+        "ok": True,
+        "category": category,
+        "subcategory": subcategory,
+        "value": value,
+    }
+
+
+def delete_catalog_typology(db, category, subcategory, value):
+    category = (category or "").strip()
+    subcategory = (subcategory or "").strip()
+    value = (value or "").strip()
+
+    values = db.setdefault("typologies", {}).setdefault(category, {}).setdefault(subcategory, [])
+    if value in values:
+        values.remove(value)
+
+    return {"ok": True}
+
+
+def delete_product_collection_link(db, category, subcategory, collection):
+    category = (category or "").strip()
+    subcategory = (subcategory or "").strip()
+    collection = (collection or "").strip()
+
+    links = db.setdefault("product_collection_links", {})
+    values = links.setdefault(category, {}).setdefault(subcategory, [])
+
+    if collection in values:
+        values.remove(collection)
+
+    if category in links and subcategory in links[category] and not links[category][subcategory]:
+        links[category].pop(subcategory, None)
+
+    if category in links and not links[category]:
+        links.pop(category, None)
+
+    return {"ok": True}

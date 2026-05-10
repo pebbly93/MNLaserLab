@@ -794,3 +794,20 @@ button {
 .field .hint {
   line-height: 1.25;
 }
+
+
+/* v39.7 catalog advanced */
+.compact-catalog-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+}
+
+.compact-catalog-form button {
+  min-height: 42px;
+}
+
+@media (max-width: 1000px) {
+  .compact-catalog-form {
+    grid-template-columns: 1fr;
+  }
+}
