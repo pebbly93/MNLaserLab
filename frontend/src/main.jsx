@@ -2131,6 +2131,54 @@ function Maintenance({ toast }) {
 }
 
 
+
+function parseCsvPurchases(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+
+  const lines = raw.split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) return [];
+
+  function splitCsvLine(line) {
+    const out = [];
+    let cur = '';
+    let quote = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+
+      if (ch === '"') {
+        if (quote && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          quote = !quote;
+        }
+      } else if ((ch === ',' || ch === ';') && !quote) {
+        out.push(cur.trim());
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+
+    out.push(cur.trim());
+    return out;
+  }
+
+  const headers = splitCsvLine(lines[0]).map(h => h.trim().toLowerCase());
+  return lines.slice(1).map((line, index) => {
+    const values = splitCsvLine(line);
+    const row = { _row: index + 2 };
+
+    headers.forEach((h, i) => {
+      row[h] = values[i] ?? '';
+    });
+
+    return row;
+  });
+}
+
 function downloadJson(filename, data) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -2149,6 +2197,8 @@ function SettingsPage({ toast }) {
   const [importText, setImportText] = useState('');
   const [backupName, setBackupName] = useState('backup manuale');
   const [backups, setBackups] = useState([]);
+  const [csvText, setCsvText] = useState('');
+  const [csvPreview, setCsvPreview] = useState([]);
 
   async function loadInfo() {
     try {
@@ -2247,6 +2297,46 @@ function SettingsPage({ toast }) {
     }
   }
 
+
+  function previewCsv() {
+    const rows = parseCsvPurchases(csvText);
+    setCsvPreview(rows);
+    if (!rows.length) {
+      toast('Nessuna riga valida nel CSV', 'err');
+    } else {
+      toast(`${rows.length} righe pronte per import`);
+    }
+  }
+
+  async function importPurchasesCsv() {
+    const rows = csvPreview.length ? csvPreview : parseCsvPurchases(csvText);
+
+    if (!rows.length) {
+      toast('Nessuna riga da importare', 'err');
+      return;
+    }
+
+    if (!confirm(`Importare ${rows.length} righe acquisto? Verrà creato un backup automatico prima dell’import.`)) return;
+
+    try {
+      const r = await postJSON('/maintenance/import-purchases', { rows });
+      setMsg(`Importate: ${r.imported}\nErrori: ${list(r.errors).length}\nBackup: ${r.backup}`);
+
+      if (list(r.errors).length) {
+        toast(`Import completato con ${list(r.errors).length} errori`, 'err');
+      } else {
+        toast('Import acquisti completato');
+        setCsvText('');
+        setCsvPreview([]);
+      }
+
+      await loadInfo();
+      await loadBackups();
+    } catch(e) {
+      toast(e.message, 'err');
+    }
+  }
+
   function backupSize(bytes) {
     const n = Number(bytes || 0);
     if (n > 1024 * 1024) return `${(n / 1024 / 1024).toFixed(2)} MB`;
@@ -2291,6 +2381,34 @@ function SettingsPage({ toast }) {
           </div>
           <button className="ghost" onClick={() => restoreBackup(b.filename)}>Ripristina</button>
         </div>) : <Empty text="Nessun backup trovato" />}
+      </div>
+    </Card>
+
+
+    <Card title="Import CSV acquisti" icon={Upload}>
+      <div className="csv-import-grid">
+        <div>
+          <textarea
+            className="import-box"
+            value={csvText}
+            onChange={e => setCsvText(e.target.value)}
+            placeholder={'area,categoria,sottocategoria,formato,spessore,unita,fornitore,quantita,costo_totale\nFalegnameria,Legname,Betulla,20x20,2 mm,pz,Fornitore,10,25'}
+          />
+          <div className="quick-actions">
+            <button className="ghost" onClick={previewCsv}><Search /> Anteprima</button>
+            <button className="primary" onClick={importPurchasesCsv}><Upload /> Importa acquisti</button>
+            <button className="ghost" onClick={() => { setCsvText(''); setCsvPreview([]); }}>Svuota</button>
+          </div>
+        </div>
+
+        <div className="csv-preview">
+          <b>Anteprima</b>
+          {csvPreview.length ? csvPreview.slice(0, 8).map((r, i) => <div key={i} className="csv-preview-row">
+            <span>{r.area || r.sezione || 'Area'}</span>
+            <strong>{r.categoria || r.category || 'Categoria'}</strong>
+            <small>{[r.sottocategoria, r.formato, r.spessore, r.quantita || r.quantità, r.costo_totale].filter(Boolean).join(' · ')}</small>
+          </div>) : <Empty text="Nessuna anteprima" />}
+        </div>
       </div>
     </Card>
 

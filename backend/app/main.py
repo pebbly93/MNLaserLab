@@ -783,3 +783,12 @@ def restore_backup(payload: Payload):
         return restore_database_from_backup(filename)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+
+@app.post("/api/maintenance/import-purchases")
+def import_purchases_api(payload: Payload):
+    try:
+        rows = payload.data.get("rows", [])
+        return mutate(import_purchase_rows, rows)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))

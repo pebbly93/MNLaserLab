@@ -2645,3 +2645,68 @@ def restore_database_from_backup(filename):
             "quotes": len(restored_data.get("quotes", [])),
         }
     }
+
+
+# ---------------------------------------------------------------------------
+# v40.4.0 - Import CSV acquisti
+# ---------------------------------------------------------------------------
+
+def import_purchase_rows(db, rows):
+    if not isinstance(rows, list):
+        raise ValueError("Formato import non valido")
+
+    backup = backup_database("prima_import_csv_acquisti")
+    imported = 0
+    errors = []
+
+    aliases = {
+        "area": ["area", "section", "sezione"],
+        "category": ["categoria", "category"],
+        "subcategory": ["sottocategoria", "subcategory", "variante"],
+        "size": ["formato", "tipo", "size"],
+        "thickness": ["spessore", "thickness"],
+        "unit": ["unita", "unità", "unit"],
+        "supplier": ["fornitore", "supplier"],
+        "quantity": ["quantita", "quantità", "qty", "quantity"],
+        "total_cost": ["costo_totale", "costo totale", "total_cost", "totale"],
+    }
+
+    def pick(row, key, default=""):
+        for name in aliases.get(key, [key]):
+            if name in row:
+                return row.get(name, default)
+        return default
+
+    for idx, row in enumerate(rows, start=1):
+        try:
+            if not isinstance(row, dict):
+                raise ValueError("Riga non valida")
+
+            payload = {
+                "section": pick(row, "area") or section_label(db, "materials"),
+                "category": pick(row, "category"),
+                "subcategory": pick(row, "subcategory"),
+                "size": pick(row, "size"),
+                "thickness": pick(row, "thickness"),
+                "unit": pick(row, "unit") or "pz",
+                "supplier": pick(row, "supplier") or "Senza fornitore",
+                "quantity": pick(row, "quantity"),
+                "total_cost": pick(row, "total_cost"),
+            }
+
+            add_purchase(db, payload)
+            imported += 1
+
+        except Exception as exc:
+            errors.append({
+                "row": idx,
+                "error": str(exc),
+                "data": row,
+            })
+
+    return {
+        "ok": not errors,
+        "imported": imported,
+        "errors": errors,
+        "backup": backup,
+    }
