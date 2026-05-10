@@ -236,37 +236,108 @@ function FlowPill({ n, title, desc, detail, icon: Icon, active }) { return <div 
 function Studio({ go }) {
   const { data: d, loading } = useApi('/dashboard', {});
   const { data: r } = useApi('/report', {});
-  const { data: alerts } = useApi('/workflow/alerts', {});
+  const { data: ops, loading: opsLoading } = useApi('/operations', { summary: {}, tasks: [], zero_cost: [], low_stock: [], products_without_bom: [], products_low_stock: [], quotes: [], quote_stats: {} });
+
   const stats = [
     ['Magazzino', money(d.inventory_value), 'materie prime', Boxes, 'cyan'],
     ['Prodotti', d.products || 0, 'creazioni MN', Factory, 'wood'],
     ['Valore prodotti', money(d.product_value), 'stock finito', PackageCheck, 'mint'],
     ['Vendite', money(d.sales), 'ricavi registrati', CircleDollarSign, 'ink'],
   ];
+
+  const priorityLabel = {
+    alta: 'Alta',
+    media: 'Media',
+    bassa: 'Bassa',
+  };
+
+  const priorityIcon = {
+    alta: AlertTriangle,
+    media: Gauge,
+    bassa: Archive,
+  };
+
+  const quickTasks = list(ops.tasks);
+
   return <>
-    <PageTitle title="Laboratorio" desc="Una versione più semplice: acquisti, prodotti, produzione, preventivo e vendita restano nello stesso flusso artigianale.">
+    <PageTitle title="Laboratorio" desc="Panoramica operativa MN Laser Lab: cosa controllare, cosa produrre e dove intervenire.">
       <button className="primary" onClick={() => go('atelier')}><Wand2 /> Avvia percorso</button>
     </PageTitle>
+
     {loading ? <Skeleton /> : <div className="stats">{stats.map(([a,b,c,I,t]) => <Stat key={a} label={a} value={b} sub={c} icon={I} tone={t}/>)}</div>}
-    <div className="wide-grid">
-      <Card title="Percorso operativo" icon={Zap} sub="Flusso operativo MN Laser Lab: dalla materia prima acquistata al prodotto finito venduto.">
-        <div className="flow-strip">
-          <FlowPill n="1" icon={Truck} title="Acquisto" desc="Materie prime da fornitori" detail="Legno, acrilico, vernici, LED, componenti e costi reali di carico." />
-          <FlowPill n="2" icon={PackagePlus} title="Creo" desc="Scheda prodotto + distinta" detail="Definisco il prodotto MN Laser Lab e collego i materiali necessari." />
-          <FlowPill n="3" icon={Factory} title="Produco" desc="Scala materiali, aumenta stock" detail="La produzione scarica il magazzino materie prime e carica i pezzi finiti." />
-          <FlowPill n="4" icon={CircleDollarSign} title="Vendo" desc="Preventivo e margine" detail="Calcolo prezzo, sconto, margine e registro la vendita finale." />
+
+    <div className="wide-grid operational-grid">
+      <Card title="Centro operativo" icon={Gauge} action={<button className="ghost" onClick={() => go('report')}><BarChart3 /> Report</button>}>
+        {opsLoading ? <Skeleton /> : <div className="operations-list">
+          {quickTasks.length ? quickTasks.map((task, i) => {
+            const Icon = priorityIcon[task.priority] || Gauge;
+
+            return <button key={i} className={`operation-task ${task.priority}`} onClick={() => go(task.target)}>
+              <span><Icon /></span>
+              <div>
+                <b>{task.title}</b>
+                <small>{task.detail}</small>
+              </div>
+              <strong>{task.count}</strong>
+              <em>{priorityLabel[task.priority] || task.priority}</em>
+            </button>;
+          }) : <div className="operation-empty">
+            <CheckCircle2 />
+            <b>Tutto sotto controllo</b>
+            <span>Nessuna criticità evidente in magazzino, prodotti e preventivi.</span>
+          </div>}
+        </div>}
+      </Card>
+
+      <Card title="Azioni rapide" icon={Zap}>
+        <div className="quick-action-grid">
+          <button onClick={() => go('materials')}><PackagePlus /><b>Registra acquisto</b><span>Carica stock e costo reale</span></button>
+          <button onClick={() => go('products')}><Factory /><b>Crea prodotto</b><span>Wizard, BOM e produzione</span></button>
+          <button onClick={() => go('quote')}><Calculator /><b>Fai preventivo</b><span>Prezzo e margine</span></button>
+          <button onClick={() => go('sales')}><ShoppingCart /><b>Registra vendita</b><span>Scarico prodotto finito</span></button>
         </div>
-        <div className="quick-actions"><button onClick={() => go('materials')}>Registra acquisto <ArrowRight /></button><button onClick={() => go('products')}>Crea prodotto finito <ArrowRight /></button><button onClick={() => go('quote')}>Calcola prezzo <ArrowRight /></button><button onClick={() => go('report')}>Controlla margini <ArrowRight /></button></div>
       </Card>
-      <Card title="Margine attività" icon={BarChart3} sub="Sintesi economica per capire se ciò che produci conviene davvero.">
-        <div className="mini-stats"><Stat label="Raw" value={money(r.raw_total)} /><Stat label="Prodotti" value={money(r.product_total)} /><Stat label="Margine" value={money(r.margin_total)} sub={`${num(r.margin_pct)} %`} /></div>
+    </div>
+
+    <div className="split-main">
+      <Card title="Materiali da controllare" icon={AlertTriangle}>
+        <div className="mini-list">
+          {list(ops.zero_cost).slice(0, 5).map((x, i) => <button key={i} onClick={() => go('materials')}>
+            <b>{x.name}</b>
+            <span>{[x.category, x.subcategory, x.size, x.thickness].filter(Boolean).join(' · ')}</span>
+            <strong>{num(x.stock)} {x.unit || ''} · costo 0</strong>
+          </button>)}
+          {!list(ops.zero_cost).length && <Empty text="Nessun costo mancante" />}
+        </div>
       </Card>
-      <Card title="Da controllare oggi" icon={AlertTriangle} sub="L'app evidenzia le attività che possono bloccare produzione, preventivi o margini.">
-        <div className="workflow-alert-grid">
-          <button onClick={() => go('materials')}><b>{alerts.materials_to_check || 0}</b><span>Materiali da verificare</span></button>
-          <button onClick={() => go('materials')}><b>{alerts.low_stock_materials || 0}</b><span>Sotto scorta</span></button>
-          <button onClick={() => go('quote')}><b>{alerts.open_quotes || 0}</b><span>Preventivi aperti</span></button>
-          <button onClick={() => go('quote')}><b>{money(alerts.potential_quotes_value)}</b><span>Valore potenziale</span></button>
+
+      <Card title="Prodotti da completare" icon={PackageCheck}>
+        <div className="mini-list">
+          {list(ops.products_without_bom).slice(0, 5).map((x, i) => <button key={i} onClick={() => go('products')}>
+            <b>{x.name}</b>
+            <span>{[x.category, x.subcategory, x.collection].filter(Boolean).join(' · ') || 'Prodotto'}</span>
+            <strong>BOM mancante</strong>
+          </button>)}
+          {!list(ops.products_without_bom).length && <Empty text="Nessun prodotto senza BOM" />}
+        </div>
+      </Card>
+    </div>
+
+    <div className="wide-grid">
+      <Card title="Percorso operativo" icon={Zap}>
+        <div className="flow-strip">
+          <FlowPill n="1" icon={Truck} title="Acquisto" desc="Materie prime" detail="Legno, acrilico, vernici, LED e componenti." />
+          <FlowPill n="2" icon={PackagePlus} title="Creo" desc="Scheda prodotto" detail="Categoria, collezione e distinta base." />
+          <FlowPill n="3" icon={Factory} title="Produco" desc="Scala materiali" detail="Controllo stock e alternative intelligenti." />
+          <FlowPill n="4" icon={CircleDollarSign} title="Vendo" desc="Margine" detail="Preventivi, PDF e vendite." />
+        </div>
+      </Card>
+
+      <Card title="Margine attività" icon={BarChart3}>
+        <div className="mini-stats">
+          <Stat label="Raw" value={money(r.raw_total)} />
+          <Stat label="Prodotti" value={money(r.product_total)} />
+          <Stat label="Margine" value={money(r.margin_total)} sub={`${num(r.margin_pct)} %`} />
         </div>
       </Card>
     </div>

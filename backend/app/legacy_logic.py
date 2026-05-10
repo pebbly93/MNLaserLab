@@ -2710,3 +2710,124 @@ def import_purchase_rows(db, rows):
         "errors": errors,
         "backup": backup,
     }
+
+
+# ---------------------------------------------------------------------------
+# v40.5.0 - Dashboard operativa intelligente
+# ---------------------------------------------------------------------------
+
+def operational_dashboard(db):
+    raw_items = aggregated_raw_items(db)
+
+    zero_cost = []
+    low_stock = []
+    never_purchased = []
+
+    for item in raw_items:
+        stock = parse_float(item.get("stock"))
+        cost = parse_float(item.get("cost_per_unit", item.get("weighted_average_cost", 0)))
+        status = item.get("inventory_status", "")
+
+        if stock > 0 and cost <= 0:
+            zero_cost.append(item)
+
+        if stock <= 1 and stock > 0:
+            low_stock.append(item)
+
+        if stock <= 0 and cost <= 0 or status == "mai_acquistato":
+            never_purchased.append(item)
+
+    products = []
+    products_without_bom = []
+    products_low_stock = []
+
+    for name, info in db.get("products", {}).items():
+        if not isinstance(info, dict):
+            continue
+
+        stock = parse_float(info.get("stock"))
+        bom = info.get("bom", []) or []
+        unit_cost = product_unit_cost(db, name)
+
+        row = {
+            "name": name,
+            "category": info.get("category", ""),
+            "subcategory": info.get("subcategory", ""),
+            "collection": info.get("collection", ""),
+            "stock": stock,
+            "unit_cost": unit_cost,
+            "bom_count": len(bom),
+        }
+
+        products.append(row)
+
+        if not bom:
+            products_without_bom.append(row)
+
+        if stock <= 1:
+            products_low_stock.append(row)
+
+    quotes = db.get("quotes", []) or []
+    quote_stats = {}
+    quote_rows = []
+
+    for q in quotes:
+        if not isinstance(q, dict):
+            continue
+
+        status = q.get("status", "bozza") or "bozza"
+        quote_stats[status] = quote_stats.get(status, 0) + 1
+
+        if status in ("bozza", "inviato", "accettato", "da_modificare"):
+            quote_rows.append({
+                "id": q.get("id", ""),
+                "name": q.get("name", ""),
+                "customer": q.get("customer", ""),
+                "status": status,
+                "total": q.get("recommended") or q.get("discounted") or q.get("total") or 0,
+                "date": q.get("date", ""),
+            })
+
+    sales_total = sum(parse_float(s.get("total")) for s in db.get("sales", []) if isinstance(s, dict))
+    raw_value = sum(parse_float(x.get("value")) for x in raw_items)
+    product_value = sum(parse_float(p.get("stock")) * product_unit_cost(db, name) for name, p in db.get("products", {}).items() if isinstance(p, dict))
+
+    tasks = []
+
+    def add_task(priority, title, detail, target, count=0):
+        if count:
+            tasks.append({
+                "priority": priority,
+                "title": title,
+                "detail": detail,
+                "target": target,
+                "count": count,
+            })
+
+    add_task("alta", "Materiali con costo mancante", "Stock presente ma costo medio pari a zero", "materials", len(zero_cost))
+    add_task("alta", "Prodotti senza distinta base", "Prodotti creati ma senza materiali collegati", "products", len(products_without_bom))
+    add_task("media", "Materiali sotto scorta", "Stock basso o da ricontrollare", "materials", len(low_stock))
+    add_task("media", "Prodotti con stock basso", "Prodotti finiti con disponibilità ≤ 1", "products", len(products_low_stock))
+    add_task("bassa", "Preset mai acquistati", "Articoli presenti da catalogo ma non ancora valorizzati", "materials", len(never_purchased))
+    add_task("media", "Preventivi accettati", "Da trasformare in produzione/consegna", "quote", quote_stats.get("accettato", 0))
+
+    priority_order = {"alta": 0, "media": 1, "bassa": 2}
+    tasks.sort(key=lambda x: (priority_order.get(x.get("priority"), 9), -x.get("count", 0)))
+
+    return {
+        "summary": {
+            "raw_value": round(raw_value, 2),
+            "product_value": round(product_value, 2),
+            "sales_total": round(sales_total, 2),
+            "raw_items": len(raw_items),
+            "products": len(products),
+            "quotes": len(quotes),
+        },
+        "tasks": tasks[:8],
+        "zero_cost": zero_cost[:10],
+        "low_stock": low_stock[:10],
+        "products_without_bom": products_without_bom[:10],
+        "products_low_stock": products_low_stock[:10],
+        "quotes": quote_rows[:10],
+        "quote_stats": quote_stats,
+    }

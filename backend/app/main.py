@@ -792,3 +792,8 @@ def import_purchases_api(payload: Payload):
         return mutate(import_purchase_rows, rows)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+
+@app.get("/api/operations")
+def operations_api():
+    return operational_dashboard(load_db())
