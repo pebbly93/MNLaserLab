@@ -397,9 +397,127 @@ function ProductionBox({ products, refresh, toast }) {
   const [name, setName] = useState('');
   const [qty, setQty] = useState(1);
   const [check, setCheck] = useState(null);
-  async function checkNow() { if (!name) return; try { setCheck(await postJSON(`/products/${encodeURIComponent(name)}/check-production`, { qty })); } catch (e) { toast(e.message, 'err'); } }
-  async function produce() { if (!name) return; try { await postJSON(`/products/${encodeURIComponent(name)}/produce`, { qty, substitutions: {} }); toast('Produzione completata'); setCheck(null); refresh(); } catch (e) { toast(e.message, 'err'); } }
-  return <div className="production-panel"><div className="inline"><select value={name} onChange={e => { setName(e.target.value); setCheck(null); }}><option value="">Scegli prodotto</option>{list(products).map(p => <option key={p.name}>{p.name}</option>)}</select><input type="number" step="0.01" value={qty} onChange={e => setQty(e.target.value)} /><button onClick={checkNow}><Search /> Verifica</button><button className="primary" onClick={produce}><Hammer /> Produci</button></div>{check && <div className={check.can_produce ? 'notice ok' : 'notice warn'}>{check.can_produce ? <CheckCircle2 /> : <AlertTriangle />} {check.can_produce ? 'Materiali sufficienti per produrre.' : 'Alcuni materiali risultano insufficienti. Controlla BOM e magazzino.'}</div>}</div>;
+  const [substitutions, setSubstitutions] = useState({});
+
+  async function checkNow() {
+    if (!name) return;
+    try {
+      const result = await postJSON(`/products/${encodeURIComponent(name)}/check-production`, { qty });
+      setCheck(result);
+      setSubstitutions({});
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function produce() {
+    if (!name) return;
+
+    try {
+      await postJSON(`/products/${encodeURIComponent(name)}/produce`, {
+        qty,
+        substitutions
+      });
+
+      toast('Produzione completata');
+      setCheck(null);
+      setSubstitutions({});
+      refresh();
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  const rows = list(check?.rows);
+  const missingRows = rows.filter(r => !r.ok);
+  const allResolved = !missingRows.length || missingRows.every(r => substitutions[String(r.index)]);
+
+  function chooseVariant(row, variant) {
+    setSubstitutions(v => ({
+      ...v,
+      [String(row.index)]: {
+        table: variant.table,
+        key: variant.key,
+        name: variant.name
+      }
+    }));
+  }
+
+  function clearVariant(row) {
+    setSubstitutions(v => {
+      const next = { ...v };
+      delete next[String(row.index)];
+      return next;
+    });
+  }
+
+  return <div className="production-panel">
+    <div className="inline">
+      <select value={name} onChange={e => { setName(e.target.value); setCheck(null); setSubstitutions({}); }}>
+        <option value="">Scegli prodotto</option>
+        {list(products).map(p => <option key={p.name}>{p.name}</option>)}
+      </select>
+      <input type="number" step="0.01" value={qty} onChange={e => setQty(e.target.value)} />
+      <button onClick={checkNow}><Search /> Verifica</button>
+      <button className="primary" onClick={produce} disabled={check && !allResolved}>
+        <Hammer /> Produci
+      </button>
+    </div>
+
+    {check && <div className={check.can_produce ? 'notice ok' : 'notice warn'}>
+      {check.can_produce ? <CheckCircle2 /> : <AlertTriangle />}
+      {check.can_produce
+        ? 'Materiali sufficienti per produrre.'
+        : allResolved
+          ? 'Materiali mancanti risolti con alternative selezionate. Puoi produrre.'
+          : 'Alcuni materiali risultano insufficienti. Scegli una sostituzione logica.'}
+    </div>}
+
+    {rows.length > 0 && <div className="production-check-list">
+      {rows.map(row => {
+        const selected = substitutions[String(row.index)];
+
+        return <div key={row.index} className={row.ok ? 'production-row ok' : 'production-row missing'}>
+          <div className="production-row-head">
+            <div>
+              <b>{row.name}</b>
+              <small>
+                Richiesto: {num(row.needed)} {row.unit || ''} · Disponibile: {num(row.available)} {row.unit || ''}
+              </small>
+            </div>
+            {row.ok
+              ? <span className="quote-status accepted">Disponibile</span>
+              : selected
+                ? <span className="quote-status sent">Sostituito</span>
+                : <span className="quote-status rejected">Mancante</span>}
+          </div>
+
+          {!row.ok && <div className="variant-panel">
+            {selected && <div className="selected-variant">
+              <span>Alternativa selezionata</span>
+              <b>{selected.name}</b>
+              <button className="ghost" onClick={() => clearVariant(row)}>Cambia</button>
+            </div>}
+
+            {!selected && <>
+              <h4>Alternative consigliate</h4>
+              {list(row.variants).length ? <div className="variant-grid">
+                {list(row.variants).map(v => <button key={v.table + v.key} type="button" className="variant-card" onClick={() => chooseVariant(row, v)}>
+                  <div>
+                    <b>{v.name}</b>
+                    <small>{[v.category, v.subcategory, v.size, v.thickness].filter(Boolean).join(' · ')}</small>
+                  </div>
+                  <span>{num(v.stock)} {v.unit || ''}</span>
+                  <em>{v.notes}</em>
+                  <strong>{v.can_cover ? 'Copre produzione' : 'Stock parziale'}</strong>
+                </button>)}
+              </div> : <Empty text="Nessuna alternativa logica trovata" />}
+            </>}
+          </div>}
+        </div>;
+      })}
+    </div>}
+  </div>;
 }
 
 function ProductWarehouse({ products, refresh, toast, onEdit, onDelete }) {

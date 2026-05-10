@@ -844,33 +844,133 @@ def create_or_update_product(db, payload):
     return product
 
 
+
 def find_material_variants(db, item_name, needed_qty=0):
     item, table, key = get_raw_item(db, item_name)
-    if not item: return []
-    category, subcategory, size, thickness = item.get("category", ""), item.get("subcategory", ""), item.get("size", ""), item.get("thickness", "")
+    if not item:
+        return []
+
+    category = item.get("category", "")
+    subcategory = item.get("subcategory", "")
+    size = item.get("size", "")
+    thickness = item.get("thickness", "")
+    section = item.get("section", "")
+
     candidates = []
+
     for table_name in ("materials", "components"):
         for cand_key, info in db.get(table_name, {}).items():
-            if cand_key == key: continue
-            stock = parse_float(info.get("stock"))
-            if stock <= 0: continue
-            same_category = category and info.get("category") == category; same_sub = subcategory and info.get("subcategory") == subcategory; same_size = size and info.get("size") == size; same_thick = thickness and info.get("thickness") == thickness
-            score = 0; notes=[]
-            if category == "Legname":
-                if not (same_category and same_size and same_thick): continue
-                score += 10; notes += ["stesso legname", "stesso formato", "stesso spessore"]
-                notes.append("stessa essenza" if same_sub else f"essenza alternativa: {info.get('subcategory','')}")
-            else:
-                if not same_category: continue
-                score += 4; notes.append("stessa categoria")
-                if same_sub: score += 3; notes.append("stessa sottocategoria")
-                if same_size: score += 2; notes.append("stesso formato/tipologia")
-                if same_thick: score += 2; notes.append("stesso spessore")
-            if stock >= needed_qty: score += 3; notes.append("stock sufficiente")
-            else: notes.append("stock parziale")
-            candidates.append({"key": cand_key, "table": table_name, "name": display_name_from_key(cand_key, info), "stock": stock, "unit": info.get("unit", ""), "category": info.get("category", ""), "subcategory": info.get("subcategory", ""), "size": info.get("size", ""), "thickness": info.get("thickness", ""), "supplier": info.get("supplier", ""), "score": score, "can_cover": stock >= needed_qty, "notes": ", ".join(notes)})
-    return sorted(candidates, key=lambda x: (x["can_cover"], x["score"], x["stock"]), reverse=True)[:8]
+            if cand_key == key:
+                continue
 
+            if not isinstance(info, dict):
+                continue
+
+            stock = parse_float(info.get("stock"))
+            if stock <= 0:
+                continue
+
+            cand_category = info.get("category", "")
+            cand_subcategory = info.get("subcategory", "")
+            cand_size = info.get("size", "")
+            cand_thickness = info.get("thickness", "")
+            cand_section = info.get("section", "")
+
+            same_section = section and cand_section == section
+            same_category = category and cand_category == category
+            same_sub = subcategory and cand_subcategory == subcategory
+            same_size = size and cand_size == size
+            same_thick = thickness and cand_thickness == thickness
+
+            # Non mischiare aree/categorie senza logica.
+            # Esempio: Legname può proporre Pioppo/MDF/Betulla, ma non LED/12V.
+            if category == "Legname":
+                if cand_category != "Legname":
+                    continue
+            else:
+                # Per componenti/illuminazione serve almeno stessa categoria,
+                # oppure stessa area + sottocategoria molto simile.
+                if not same_category:
+                    continue
+
+            score = 0
+            notes = []
+
+            if same_section:
+                score += 2
+                notes.append("stessa area")
+
+            if same_category:
+                score += 8
+                notes.append("stessa categoria")
+
+            if same_sub:
+                score += 8
+                notes.append("stessa sottocategoria/essenza")
+            elif cand_subcategory:
+                score += 2
+                notes.append(f"alternativa: {cand_subcategory}")
+
+            if same_size:
+                score += 6
+                notes.append("stesso formato")
+            elif cand_size:
+                score += 1
+                notes.append(f"formato diverso: {cand_size}")
+
+            if same_thick:
+                score += 6
+                notes.append("stesso spessore")
+            elif cand_thickness:
+                score += 1
+                notes.append(f"spessore diverso: {cand_thickness}")
+
+            if stock >= needed_qty:
+                score += 5
+                notes.append("stock sufficiente")
+            else:
+                notes.append("stock parziale")
+
+            # Priorità esempi:
+            # Betulla 4 mancante → Pioppo 4 molto alto
+            # Betulla 4 mancante → Betulla 6 alto
+            # Betulla 4 mancante → Pioppo 6 medio
+            if category == "Legname":
+                if same_size and same_thick:
+                    score += 8
+                elif same_sub and same_size:
+                    score += 5
+                elif same_size or same_thick:
+                    score += 3
+
+            unit_cost = parse_float(info.get("weighted_average_cost", info.get("cost_per_unit")))
+
+            candidates.append({
+                "key": cand_key,
+                "table": table_name,
+                "name": display_name_from_key(cand_key, info),
+                "stock": stock,
+                "unit": info.get("unit", ""),
+                "category": cand_category,
+                "subcategory": cand_subcategory,
+                "size": cand_size,
+                "thickness": cand_thickness,
+                "supplier": info.get("supplier", ""),
+                "unit_cost": unit_cost,
+                "score": score,
+                "can_cover": stock >= needed_qty,
+                "notes": ", ".join(notes),
+            })
+
+    return sorted(
+        candidates,
+        key=lambda x: (
+            x.get("can_cover", False),
+            x.get("score", 0),
+            x.get("stock", 0)
+        ),
+        reverse=True
+    )[:10]
 
 def production_check(db, product_name, qty):
     product = db.get("products", {}).get(product_name)
