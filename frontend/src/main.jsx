@@ -2946,6 +2946,102 @@ function MNLogoMark() {
 
 
 
+
+function SystemPage({ toast }) {
+  const { data: status, refresh } = useApi('/system/status', {});
+  const { data: version } = useApi('/system/version', {});
+
+  const lanUrl = status?.lan_url || '';
+  const localUrl = status?.local_url || '';
+  const qrSvg = lanUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(lanUrl)}`
+    : '';
+
+  async function copy(text, label = 'Copiato') {
+    try {
+      await navigator.clipboard.writeText(text || '');
+      toast(label);
+    } catch {
+      toast(text || 'Dato non disponibile');
+    }
+  }
+
+  return <>
+    <PageTitle
+      title="Sistema"
+      subtitle="Stato dell'app, accesso da smartphone, rete locale e informazioni di servizio."
+      icon={Activity}
+    />
+
+    <div className="system-page-grid">
+      <Card title="Stato applicazione" icon={Server} sub="Backend locale e ambiente runtime.">
+        <div className="system-kpi-grid">
+          <div><span>Edizione</span><b>{status.edition || '—'}</b></div>
+          <div><span>Versione</span><b>{status.version || version.current_version || '—'}</b></div>
+          <div><span>Porta</span><b>{status.port || '—'}</b></div>
+          <div><span>Ora</span><b>{status.time || '—'}</b></div>
+        </div>
+
+        <div className="system-path-box">
+          <span>Cartella runtime</span>
+          <code>{status.cwd || '—'}</code>
+        </div>
+
+        <div className="quick-actions">
+          <button className="ghost" onClick={refresh}><RefreshCw /> Aggiorna stato</button>
+        </div>
+      </Card>
+
+      <Card title="Accesso mobile" icon={Smartphone} sub="Apri il gestionale da smartphone o tablet sulla stessa rete Wi-Fi.">
+        <div className="lan-access-box">
+          <div>
+            <span>Da questo PC</span>
+            <b>{localUrl || '—'}</b>
+            <button className="ghost" onClick={() => copy(localUrl, 'Link locale copiato')}><Copy /> Copia</button>
+          </div>
+
+          <div>
+            <span>Da smartphone / rete LAN</span>
+            <b>{lanUrl || '—'}</b>
+            <button className="primary" onClick={() => copy(lanUrl, 'Link LAN copiato')}><Copy /> Copia link LAN</button>
+          </div>
+        </div>
+
+        {qrSvg && <div className="mobile-qr-box">
+          <img src={qrSvg} alt="QR code accesso mobile MN Laser Lab" />
+          <small>Scansiona il QR con lo smartphone collegato alla stessa rete Wi-Fi del PC.</small>
+        </div>}
+      </Card>
+
+      <Card title="Database locale" icon={Database} sub="Conteggio rapido dei dati principali salvati.">
+        <div className="system-counts">
+          {Object.entries(status.db_counts || {}).map(([k, v]) => (
+            <div key={k}>
+              <span>{k}</span>
+              <b>{v}</b>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Aggiornamenti" icon={DownloadCloud} sub="Base per il futuro update manager della Browser Edition.">
+        <div className="update-status-box">
+          <div>
+            <span>Canale</span>
+            <b>{version.channel || 'browser-edition'}</b>
+          </div>
+          <div>
+            <span>Aggiornamenti automatici</span>
+            <b>{version.automatic_updates ? 'Attivi' : 'Non ancora attivi'}</b>
+          </div>
+        </div>
+        <p className="muted">{version.message || 'Gli aggiornamenti automatici saranno integrati in una prossima versione.'}</p>
+      </Card>
+    </div>
+  </>;
+}
+
+
 function App() {
   const [tab, setTab] = useState(() => localStorage.getItem('mnll_tab') === 'maintenance' ? 'settings' : (localStorage.getItem('mnll_tab') || 'studio'));
   const [mobile, setMobile] = useState(false);
@@ -2961,6 +3057,7 @@ function App() {
     { id: 'people', label: 'Clienti e fornitori', icon: Users },
     { id: 'setup', label: 'Categorie', icon: Tags },
     { id: 'report', label: 'Report', icon: BarChart3 },
+    { id: 'system', label: 'Sistema', icon: Activity },
     { id: 'settings', label: 'Impostazioni', icon: Settings2 },
   ];
   const pages = { studio: Studio, atelier: Atelier, materials: Materials, products: Products, quote: Quote, sales: Sales, people: People, setup: Setup, report: Report, settings: SettingsPage };
