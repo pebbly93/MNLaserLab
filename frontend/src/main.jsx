@@ -3057,7 +3057,6 @@ function App() {
     { id: 'people', label: 'Clienti e fornitori', icon: Users },
     { id: 'setup', label: 'Categorie', icon: Tags },
     { id: 'report', label: 'Report', icon: BarChart3 },
-    { id: 'system', label: 'Sistema', icon: Activity },
     { id: 'settings', label: 'Impostazioni', icon: Settings2 },
   ];
   const pages = { studio: Studio, atelier: Atelier, materials: Materials, products: Products, quote: Quote, sales: Sales, people: People, setup: Setup, report: Report, settings: SettingsPage };
