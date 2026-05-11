@@ -1,5 +1,2 @@
 @echo off
-setlocal
-cd /d "%~dp0"
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Apri_MN_Laser_Lab.ps1"
+start "" http://127.0.0.1:8000/

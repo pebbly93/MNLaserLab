@@ -4059,3 +4059,150 @@ def system_status_info(db):
             "suppliers": len(db.get("suppliers", {}) or {}),
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# v42.3.0 - Wood treatments as dedicated cost section
+# ---------------------------------------------------------------------------
+
+def normalize_treatment_rows(rows):
+    normalized = []
+    if not isinstance(rows, list):
+        return normalized
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        name = str(row.get("name") or row.get("label") or "").strip()
+        if not name:
+            continue
+
+        qty = parse_float(row.get("qty", row.get("quantity", 1)), 1)
+        unit_cost = parse_float(row.get("unit_cost", row.get("cost_per_unit", 0)), 0)
+        labor_hours = parse_float(row.get("labor_hours", 0), 0)
+        steps = str(row.get("steps") or "").strip()
+        type_ = str(row.get("type") or "trattamento").strip()
+        notes = str(row.get("notes") or "").strip()
+
+        normalized.append({
+            "kind": "wood_treatment",
+            "name": name,
+            "label": name,
+            "qty": qty,
+            "unit": row.get("unit") or "app.",
+            "unit_cost": unit_cost,
+            "cost_per_unit": unit_cost,
+            "weighted_average_cost": unit_cost,
+            "labor_hours": labor_hours,
+            "steps": steps,
+            "type": type_,
+            "notes": notes,
+            "cost": round(qty * unit_cost, 2),
+        })
+
+    return normalized
+
+
+def treatment_rows_cost(rows):
+    return round(sum(parse_float(r.get("cost"), parse_float(r.get("qty", 1)) * parse_float(r.get("unit_cost", 0))) for r in normalize_treatment_rows(rows)), 2)
+
+
+def treatment_rows_labor_hours(rows):
+    return round(sum(parse_float(r.get("qty", 1)) * parse_float(r.get("labor_hours", 0)) for r in normalize_treatment_rows(rows)), 3)
+
+
+try:
+    _mnll_original_product_unit_cost_v4230 = product_unit_cost
+except Exception:
+    _mnll_original_product_unit_cost_v4230 = None
+
+try:
+    _mnll_original_product_detail_v4230 = product_detail
+except Exception:
+    _mnll_original_product_detail_v4230 = None
+
+try:
+    _mnll_original_save_product_v4230 = save_product
+except Exception:
+    _mnll_original_save_product_v4230 = None
+
+try:
+    _mnll_original_save_quote_v4230 = save_quote
+except Exception:
+    _mnll_original_save_quote_v4230 = None
+
+
+def product_treatment_unit_cost(db, name):
+    p = db.get("products", {}).get(name) or {}
+    return treatment_rows_cost(p.get("treatments") or p.get("treatment_rows") or [])
+
+
+def product_unit_cost(db, name):
+    base = _mnll_original_product_unit_cost_v4230(db, name) if _mnll_original_product_unit_cost_v4230 else 0
+    return round(parse_float(base) + product_treatment_unit_cost(db, name), 2)
+
+
+def save_product(db, payload):
+    result = _mnll_original_save_product_v4230(db, payload) if _mnll_original_save_product_v4230 else {"ok": True}
+
+    name = payload.get("name") or payload.get("old_name")
+    if name and name in db.get("products", {}):
+        treatments = normalize_treatment_rows(payload.get("treatments") or payload.get("treatment_rows") or [])
+        db["products"][name]["treatments"] = treatments
+        db["products"][name]["treatment_unit_cost"] = treatment_rows_cost(treatments)
+        db["products"][name]["treatment_labor_hours"] = treatment_rows_labor_hours(treatments)
+
+    return result
+
+
+def product_detail(db, name):
+    detail = _mnll_original_product_detail_v4230(db, name) if _mnll_original_product_detail_v4230 else {}
+    p = db.get("products", {}).get(name) or {}
+    treatments = normalize_treatment_rows(p.get("treatments") or p.get("treatment_rows") or [])
+
+    if isinstance(detail, dict):
+        detail["treatments"] = treatments
+        detail["treatment_cost"] = treatment_rows_cost(treatments)
+        detail["treatment_labor_hours"] = treatment_rows_labor_hours(treatments)
+        detail["unit_cost"] = product_unit_cost(db, name)
+
+    return detail
+
+
+def save_quote(db, payload):
+    treatments = normalize_treatment_rows(payload.get("treatments") or payload.get("treatment_rows") or [])
+
+    # Per compatibilità col calcolo attuale, i trattamenti entrano anche nelle rows,
+    # ma vengono marcati come kind=wood_treatment per distinguerli dai materiali.
+    rows = payload.get("rows") or []
+    rows = list(rows) if isinstance(rows, list) else []
+
+    existing_treatment_names = {
+        str(r.get("name") or r.get("label") or "").strip()
+        for r in rows
+        if isinstance(r, dict) and r.get("kind") == "wood_treatment"
+    }
+
+    for tr in treatments:
+        if tr["name"] not in existing_treatment_names:
+            rows.append(tr)
+
+    payload = {**payload, "rows": rows, "treatments": treatments, "treatment_rows": treatments}
+
+    result = _mnll_original_save_quote_v4230(db, payload) if _mnll_original_save_quote_v4230 else {"ok": True}
+
+    quote_id = None
+    if isinstance(result, dict):
+        quote_id = result.get("id") or (result.get("quote") or {}).get("id")
+
+    if quote_id:
+        for q in db.get("quotes", []) or []:
+            if q.get("id") == quote_id:
+                q["treatments"] = treatments
+                q["treatment_rows"] = treatments
+                q["treatment_cost"] = treatment_rows_cost(treatments)
+                q["treatment_labor_hours"] = treatment_rows_labor_hours(treatments)
+                break
+
+    return result

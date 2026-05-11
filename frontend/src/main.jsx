@@ -249,7 +249,7 @@ function FlowPill({ n, title, desc, detail, icon: Icon, active }) { return <div 
 function Studio({ go }) {
   const { data: d, loading } = useApi('/dashboard', {});
   const { data: r } = useApi('/report', {});
-  const { data: ops, loading: opsLoading } = useApi('/operations', { summary: {}, tasks: [], zero_cost: [], low_stock: [], products_without_bom: [], products_low_stock: [], quotes: [], quote_stats: {} });
+  const { data: ops, loading: opsLoading } = useApi('/operations', { summary: {}, tasks: [], zero_cost: [], low_stock: [], products_without_bom: [], treatments: [], treatments: [], products_low_stock: [], quotes: [], quote_stats: {} });
 
   const stats = [
     ['Magazzino', money(d.inventory_value), 'materie prime', Boxes, 'cyan'],
@@ -478,7 +478,99 @@ function Materials({ toast }) {
 }
 
 
+
+function TreatmentCostPanel({ treatments = [], selectedRows = [], setSelectedRows, toast, title = "Trattamenti e finiture", compact = false }) {
+  const [selected, setSelected] = useState('');
+  const [qty, setQty] = useState(1);
+  const [overrideCost, setOverrideCost] = useState('');
+
+  const current = list(treatments).find(t => t.name === selected);
+  const total = list(selectedRows).reduce((sum, r) => sum + Number(r.cost || 0), 0);
+
+  function addTreatment() {
+    if (!current) {
+      toast && toast('Seleziona un trattamento', 'err');
+      return;
+    }
+
+    const q = Number(qty || 1);
+    const unitCost = overrideCost !== '' ? Number(overrideCost || 0) : Number(current.unit_cost || 0);
+
+    const row = {
+      kind: 'wood_treatment',
+      name: current.name,
+      label: current.name,
+      type: current.type || 'trattamento',
+      steps: current.steps || '',
+      notes: current.notes || '',
+      qty: q,
+      unit: 'app.',
+      unit_cost: unitCost,
+      cost_per_unit: unitCost,
+      weighted_average_cost: unitCost,
+      labor_hours: Number(current.labor_hours || 0),
+      cost: q * unitCost,
+    };
+
+    setSelectedRows(v => [...list(v), row]);
+    setSelected('');
+    setQty(1);
+    setOverrideCost('');
+  }
+
+  function removeTreatment(i) {
+    setSelectedRows(v => list(v).filter((_, idx) => idx !== i));
+  }
+
+  return <div className={compact ? "treatment-cost-panel compact" : "treatment-cost-panel"}>
+    <div className="treatment-cost-head">
+      <div>
+        <b>{title}</b>
+        <span>Finiture applicate al pezzo, separate dai materiali.</span>
+      </div>
+      <strong>{money(total)}</strong>
+    </div>
+
+    <div className="treatment-picker-grid">
+      <Select label="Tipo trattamento" value={selected} onChange={e => {
+        setSelected(e.target.value);
+        setOverrideCost('');
+      }}>
+        <option value="">Scegli trattamento</option>
+        {list(treatments).map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+      </Select>
+
+      <Input label="Applicazioni" type="number" step="0.01" value={qty} onChange={e => setQty(e.target.value)} />
+      <Input label="Costo override €" type="number" step="0.01" value={overrideCost} onChange={e => setOverrideCost(e.target.value)} />
+      <button type="button" className="primary treatment-add-btn" onClick={addTreatment}>+ Aggiungi</button>
+    </div>
+
+    {current && <div className="selected-treatment-preview">
+      <b>{current.name}</b>
+      <span>{current.type || 'trattamento'} · {current.steps || 'Fasi non indicate'}</span>
+      <em>{money(overrideCost !== '' ? Number(overrideCost || 0) : Number(current.unit_cost || 0))} · {num(current.labor_hours || 0)} h</em>
+    </div>}
+
+    <div className="selected-treatment-list">
+      {list(selectedRows).length ? list(selectedRows).map((r, i) => <div key={`${r.name}-${i}`} className="selected-treatment-row">
+        <div>
+          <b>{r.name}</b>
+          <span>{r.type || 'trattamento'} · {r.steps || 'Fasi non indicate'}</span>
+          {r.notes && <small>{r.notes}</small>}
+        </div>
+        <div className="selected-treatment-values">
+          <span>{num(r.qty)} app.</span>
+          <strong>{money(r.cost)}</strong>
+          <button type="button" className="ghost danger" onClick={() => removeTreatment(i)}>×</button>
+        </div>
+      </div>) : <div className="empty-treatment">Nessun trattamento applicato.</div>}
+    </div>
+  </div>;
+}
+
+
 function ProductWizard({ inv, sug, refresh, refreshSug, toast }) {
+  const { data: woodTreatments } = useApi('/catalog/wood-treatments', []);
   const [step, setStep] = useState(1);
   const [materialSearch, setMaterialSearch] = useState('');
   const [selectedMaterial, setSelectedMaterial] = useState('');
@@ -529,6 +621,7 @@ function ProductWizard({ inv, sug, refresh, refreshSug, toast }) {
 
   const laborCost = Number(draft.labor_hours || 0) * Number(draft.hourly_rate || 0);
   const extraCost = Number(draft.extra_unit_cost || 0);
+  const treatmentCost = list(draft.treatments).reduce((sum, r) => sum + Number(r.cost || 0), 0);
   const unitCost = materialCost + laborCost + extraCost;
 
   const canNext = () => {
@@ -762,23 +855,35 @@ function ProductWizard({ inv, sug, refresh, refreshSug, toast }) {
       </div>}
 
       {step === 4 && <div className="wizard-panel">
-        <div className="wizard-section-title">
-          <b>Costi lavoro ed extra</b>
-          <span>Imposta tempo di lavorazione, tariffa e costi aggiuntivi per calcolare il costo interno.</span>
-        </div>
+        <Card title="Trattamenti e finiture prodotto" icon={Settings2} sub="Finiture applicate al pezzo, gestite separatamente dalla distinta materiali.">
+          <TreatmentCostPanel
+            treatments={woodTreatments}
+            selectedRows={draft.treatments}
+            setSelectedRows={(fn) => setDraft(v => ({ ...v, treatments: typeof fn === 'function' ? fn(v.treatments || []) : fn }))}
+            toast={toast}
+            compact
+          />
+        </Card>
 
-        <div className="form-grid">
-          <Input label="Ore lavoro" type="number" step="0.01" value={draft.labor_hours} onChange={e => setDraft({ ...draft, labor_hours: e.target.value })} />
-          <Input label="Tariffa €/h" type="number" step="0.01" value={draft.hourly_rate} onChange={e => setDraft({ ...draft, hourly_rate: e.target.value })} />
-          <Input label="Extra per pezzo €" type="number" step="0.01" value={draft.extra_unit_cost} onChange={e => setDraft({ ...draft, extra_unit_cost: e.target.value })} />
-        </div>
+        <Card title="Lavoro, extra e costo interno" icon={Calculator}>
+          <div className="muted-hint">
+            <span>Imposta tempo di lavorazione, tariffa e costi aggiuntivi per calcolare il costo interno.</span>
+          </div>
 
-        <div className="wizard-cost-grid">
-          <Stat label="Materiali" value={money(materialCost)} />
-          <Stat label="Lavoro" value={money(laborCost)} />
-          <Stat label="Extra" value={money(extraCost)} />
-          <Stat label="Costo interno/u" value={money(unitCost)} tone="mint" />
-        </div>
+          <div className="form-grid">
+            <Input label="Ore lavoro/u" type="number" step="0.01" value={draft.labor_hours} onChange={e => setDraft({ ...draft, labor_hours: e.target.value })} />
+            <Input label="Tariffa €/h" type="number" step="0.01" value={draft.hourly_rate} onChange={e => setDraft({ ...draft, hourly_rate: e.target.value })} />
+            <Input label="Extra per pezzo €" type="number" step="0.01" value={draft.extra_unit_cost} onChange={e => setDraft({ ...draft, extra_unit_cost: e.target.value })} />
+          </div>
+
+          <div className="wizard-cost-grid">
+            <span>Materiali</span><b>{money(materialCost)}</b>
+            <span>Trattamenti</span><b>{money(treatmentCost)}</b>
+            <span>Lavoro</span><b>{money(laborCost)}</b>
+            <span>Extra</span><b>{money(extraCost)}</b>
+            <span>Totale costo interno</span><b>{money(totalCost)}</b>
+          </div>
+        </Card>
       </div>}
 
       {step === 5 && <div className="wizard-panel">
@@ -1173,6 +1278,7 @@ function ProductWarehouse({ products, refresh, toast, onEdit, onDelete, onDuplic
 }
 
 function Products({ toast }) {
+  const { data: woodTreatmentsProducts } = useApi('/catalog/wood-treatments', []);
   const { data: products, refresh } = useApi('/products', []);
   const { data: inv } = useApi('/inventory', []);
   const { data: movements, refresh: refreshMovements } = useApi('/products/movements', []);
@@ -1180,7 +1286,7 @@ function Products({ toast }) {
   const { data: sug, refresh: refreshSug } = useApi('/suggestions', {});
   const [q, setQ] = useState('');
   const [area, setArea] = useState('warehouse');
-  const [p, setP] = useState({ name: '', section: 'Prodotti Finiti / Semilavorati', category: '', subcategory: '', collection: '', unit: 'pz', stock: '', labor_hours: '', hourly_rate: '', extra_unit_cost: '', bom: [] });
+  const [p, setP] = useState({ name: '', section: 'Prodotti Finiti / Semilavorati', category: '', subcategory: '', collection: '', unit: 'pz', stock: '', labor_hours: '', hourly_rate: '', extra_unit_cost: '', bom: [], treatments: [] });
   const [bom, setBom] = useState({ name: '', qty: '1' });
   const [duplicateProduct, setDuplicateProduct] = useState(null);
   const [duplicateName, setDuplicateName] = useState('');
@@ -1217,6 +1323,7 @@ function Products({ toast }) {
     delete payload.labor_unit_cost;
 
     try {
+      payload.treatments = list(p.treatments);
       await postJSON('/products', payload);
       toast('Variante prodotto creata');
       setDuplicateProduct(null);
@@ -1251,6 +1358,16 @@ function Products({ toast }) {
           <Input label="Stock iniziale / rettifica" type="number" step="0.01" value={p.stock} onChange={e => setP({ ...p, stock: e.target.value })} />
           <Input label="Ore lavoro/u" type="number" step="0.01" value={p.labor_hours} onChange={e => setP({ ...p, labor_hours: e.target.value })} />
           <Input label="Tariffa €/h" type="number" step="0.01" value={p.hourly_rate} onChange={e => setP({ ...p, hourly_rate: e.target.value })} />
+          <div className="form-grid-full">
+            <TreatmentCostPanel
+              title="Trattamenti e finiture scheda prodotto"
+              treatments={woodTreatmentsProducts}
+              selectedRows={p.treatments}
+              setSelectedRows={(fn) => setP(v => ({ ...v, treatments: typeof fn === 'function' ? fn(v.treatments || []) : fn }))}
+              toast={toast}
+              compact
+            />
+          </div>
           <Input label="Extra/u €" type="number" step="0.01" value={p.extra_unit_cost} onChange={e => setP({ ...p, extra_unit_cost: e.target.value })} />
         </form>
         {selectedProduct && <div className="notice ok"><CheckCircle2 /> Stai modificando un prodotto esistente. Lo stock attuale è {num(selectedProduct.stock)} {selectedProduct.unit || 'pz'}.</div>}
@@ -1312,12 +1429,14 @@ function Products({ toast }) {
 }
 
 function Quote({ toast }) {
+  const { data: woodTreatmentsQuote } = useApi('/catalog/wood-treatments', []);
   const { data: inv } = useApi('/inventory', []);
   const { data: sug } = useApi('/suggestions', {});
   const { data: workflow, refresh: workflowRefresh } = useApi('/quotes/workflow', { statuses: quoteStatusFlow, counts: {}, quotes: [] });
   const { data: business } = useApi('/settings/business', {});
   const { data: savedQuotes, refresh: refreshQuotes } = useApi('/quotes', []);
   const [rows, setRows] = useState([]);
+  const [quoteTreatments, setQuoteTreatments] = useState([]);
   const [item, setItem] = useState('');
   const [qty, setQty] = useState('1');
   const [res, setRes] = useState(null);
@@ -1398,8 +1517,9 @@ function Quote({ toast }) {
   }
 
   async function calc() {
+    const quoteRowsForCalc = [...rows, ...quoteTreatments];
     try {
-      setRes(await postJSON('/quote/calculate', { rows, estimated_materials: [], ...cost }));
+      setRes(await postJSON('/quote/calculate', { rows: quoteRowsForCalc, treatments: quoteTreatments, treatment_rows: quoteTreatments, estimated_materials: [], ...cost }));
     } catch (e) {
       toast(e.message, 'err');
     }
@@ -1409,7 +1529,7 @@ function Quote({ toast }) {
     if (!res) return;
     const name = prompt('Nome vendita', quoteName || 'Vendita da preventivo') || 'Vendita da preventivo';
     try {
-      await postJSON('/quote/sale', { name, customer: quoteCustomer, qty: 1, unit_price: res.discounted || res.recommended, rows, estimated_materials: [], ...cost });
+      await postJSON('/quote/sale', { name, customer: quoteCustomer, qty: 1, unit_price: res.discounted || res.recommended, rows: [...rows, ...quoteTreatments], treatments: quoteTreatments, treatment_rows: quoteTreatments, estimated_materials: [], ...cost });
       toast('Vendita da preventivo registrata');
     } catch (e) {
       toast(e.message, 'err');
@@ -1614,11 +1734,22 @@ function Quote({ toast }) {
 
     <div className="split-main">
       <Card title="Costi e margini" icon={Calculator} action={<button className="primary" onClick={calc}><Calculator /> Calcola preventivo</button>}>
-        <div className="form-grid small-grid">
+        <div className="form-grid-full quote-treatment-inline">
+          <TreatmentCostPanel
+            title="Trattamenti e finiture"
+            treatments={woodTreatmentsQuote}
+            selectedRows={quoteTreatments}
+            setSelectedRows={setQuoteTreatments}
+            toast={toast}
+            compact
+          />
+        </div>
+
+        <div className="form-grid">
           {Object.keys(cost).map(k => <Input key={k} label={costLabels[k] || k} type="number" step="0.01" value={cost[k]} onChange={e => setCost({ ...cost, [k]: e.target.value })} />)}
         </div>
-        {res && <div className="quick-actions"><button onClick={sale}><ShoppingCart /> Registra vendita da preventivo</button><button onClick={() => saveQuote('draft')}><Save /> Salva preventivo</button></div>}
       </Card>
+
       <Card title="Riepilogo rapido" icon={Gauge} sub="Il prezzo consigliato tiene conto di costi reali, commissioni e margine desiderato.">
         {res ? <div className="quote-result-grid">
           <Stat label="Costo reale" value={money(res.real_cost)} />
@@ -2503,25 +2634,25 @@ function PdfSettingsPanel({ toast }) {
     }
   }
 
-  async function exportPdfModel() {
+  async function exportPdfSettings() {
     try {
       const r = await getJSON('/settings/pdf/export');
-      downloadJson(r.filename || 'mn_laser_lab_pdf_template.json', r.data || {});
+      downloadJson('mn_laser_lab_pdf_settings.json', r);
       toast('Modello PDF esportato');
     } catch (e) {
       toast(e.message, 'err');
     }
   }
 
-  async function importPdfModel() {
+  async function importPdfSettings() {
     try {
-      const parsed = JSON.parse(importModelText);
+      const parsed = JSON.parse(importModelText || '{}');
       await postJSON('/settings/pdf/import', parsed);
-      setImportModelText('');
       toast('Modello PDF importato');
+      setImportModelText('');
       await refreshPdfSettings();
     } catch (e) {
-      toast('Modello non valido: ' + (e.message || e), 'err');
+      toast(e.message || 'JSON non valido', 'err');
     }
   }
 
@@ -2529,68 +2660,59 @@ function PdfSettingsPanel({ toast }) {
     <div className="pdf-settings-layout">
       <div className="pdf-settings-form">
         <div className="form-grid">
-          <Input label="Nome attività" value={pdfForm.company_name || ''} onChange={e => setPdf('company_name', e.target.value)} />
-          <Input label="Autore / titolare" value={pdfForm.author || ''} onChange={e => setPdf('author', e.target.value)} />
+          <Input label="Nome azienda / brand" value={pdfForm.company_name || ''} onChange={e => setPdf('company_name', e.target.value)} />
+          <Input label="Sottotitolo" value={pdfForm.company_subtitle || ''} onChange={e => setPdf('company_subtitle', e.target.value)} />
+          <Input label="Referente" value={pdfForm.contact_name || ''} onChange={e => setPdf('contact_name', e.target.value)} />
           <Input label="Email" value={pdfForm.email || ''} onChange={e => setPdf('email', e.target.value)} />
           <Input label="Telefono" value={pdfForm.phone || ''} onChange={e => setPdf('phone', e.target.value)} />
-          <Input label="Indirizzo" value={pdfForm.address || ''} onChange={e => setPdf('address', e.target.value)} />
           <Input label="Sito web" value={pdfForm.website || ''} onChange={e => setPdf('website', e.target.value)} />
-          <Input label="P.IVA / CF" value={pdfForm.vat || ''} onChange={e => setPdf('vat', e.target.value)} />
+          <Input label="Indirizzo" value={pdfForm.address || ''} onChange={e => setPdf('address', e.target.value)} />
           <Input label="Colore principale" value={pdfForm.primary_color || '#058482'} onChange={e => setPdf('primary_color', e.target.value)} />
+          <Input label="Validità preventivo giorni" type="number" step="1" value={pdfForm.quote_validity_days || ''} onChange={e => setPdf('quote_validity_days', e.target.value)} />
         </div>
 
-        <div className="form-grid">
-          <Input label="Titolo PDF cliente" value={pdfForm.customer_title || ''} onChange={e => setPdf('customer_title', e.target.value)} />
-          <Input label="Titolo PDF interno" value={pdfForm.internal_title || ''} onChange={e => setPdf('internal_title', e.target.value)} />
+        <label className="field form-grid-full">
+          <span>Note footer PDF</span>
+          <textarea value={pdfForm.footer_note || ''} onChange={e => setPdf('footer_note', e.target.value)} placeholder="Testo da mostrare a fondo pagina nei preventivi..." />
+        </label>
+
+        <div className="quick-actions">
+          <button className="ghost" onClick={exportPdfSettings}>Esporta modello</button>
         </div>
 
-        <Field label="Testo introduttivo">
-          <textarea value={pdfForm.intro_text || ''} onChange={e => setPdf('intro_text', e.target.value)} />
-        </Field>
-
-        <Field label="Condizioni commerciali">
-          <textarea value={pdfForm.terms || ''} onChange={e => setPdf('terms', e.target.value)} />
-        </Field>
-
-        <Field label="Footer PDF">
-          <textarea value={pdfForm.footer || ''} onChange={e => setPdf('footer', e.target.value)} />
-        </Field>
-
-        <Field label="Logo Base64 / Data URL">
-          <textarea value={pdfForm.logo_data_url || ''} onChange={e => setPdf('logo_data_url', e.target.value)} placeholder="data:image/png;base64,..." />
-        </Field>
+        <div className="import-box">
+          <label className="field">
+            <span>Importa modello JSON</span>
+            <textarea value={importModelText} onChange={e => setImportModelText(e.target.value)} placeholder='Incolla qui il JSON esportato...' />
+          </label>
+          <button className="ghost" onClick={importPdfSettings}>Importa modello</button>
+        </div>
       </div>
 
       <div className="pdf-settings-preview">
-        <div className="pdf-preview-page">
-          <div className="pdf-preview-head" style={{ borderColor: pdfForm.primary_color || '#058482' }}>
-            <div className="pdf-preview-logo">
-              {pdfForm.logo_data_url ? <img src={pdfForm.logo_data_url} alt="Logo" /> : <span>Logo</span>}
-            </div>
+        <div className="pdf-preview-sheet">
+          <div className="pdf-preview-header">
+            <img src="/mn_laser_lab_logo.png" alt="Logo MN Laser Lab" />
             <div>
-              <h3>{pdfForm.company_name || 'MN Laser Lab'}</h3>
-              <p>{pdfForm.author || 'Filippo Lolli'}</p>
-              <p>{pdfForm.email || 'filippololli1@gmail.com'}</p>
+              <b>{pdfForm.company_name || 'MN Laser Lab'}</b>
+              <span>{pdfForm.company_subtitle || 'Creazioni artigianali in legno e taglio laser'}</span>
             </div>
           </div>
-          <h4>{pdfForm.customer_title || 'Preventivo cliente'}</h4>
-          <p className="pdf-preview-intro">{pdfForm.intro_text || 'Testo introduttivo del preventivo.'}</p>
-          <div className="pdf-preview-table">
-            <span>Descrizione</span><span>Totale</span>
-            <b>Creazione personalizzata</b><b>€ 120.00</b>
+
+          <div className="pdf-preview-title">Preventivo</div>
+
+          <div className="pdf-preview-lines">
+            <span></span>
+            <span></span>
+            <span></span>
           </div>
-          <p className="pdf-preview-terms">{pdfForm.terms || 'Condizioni commerciali.'}</p>
-          <small>{pdfForm.footer || 'Footer PDF'}</small>
-        </div>
 
-        <div className="quick-actions">
-          <button className="ghost" onClick={exportPdfModel}><Download /> Esporta modello</button>
-        </div>
+          <div className="pdf-preview-total">
+            <span>Totale preventivo</span>
+            <b>€ 120,00</b>
+          </div>
 
-        <textarea className="import-box small" value={importModelText} onChange={e => setImportModelText(e.target.value)} placeholder="Incolla qui il JSON del modello PDF..." />
-        <div className="quick-actions">
-          <button className="primary" onClick={importPdfModel}><Upload /> Importa modello</button>
-          <button className="ghost" onClick={() => setImportModelText('')}>Svuota</button>
+          <small>{pdfForm.footer_note || 'Preventivo generato con MN Laser Lab Manager.'}</small>
         </div>
       </div>
     </div>
