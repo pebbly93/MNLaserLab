@@ -2947,6 +2947,7 @@ function MNLogoMark() {
 
 
 
+
 function SystemPage({ toast }) {
   const { data: status, refresh } = useApi('/system/status', {});
   const { data: version } = useApi('/system/version', {});
@@ -2957,10 +2958,10 @@ function SystemPage({ toast }) {
     ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(lanUrl)}`
     : '';
 
-  async function copy(text, label = 'Copiato') {
+  async function copyText(text, label) {
     try {
       await navigator.clipboard.writeText(text || '');
-      toast(label);
+      toast(label || 'Copiato');
     } catch {
       toast(text || 'Dato non disponibile');
     }
@@ -2969,14 +2970,13 @@ function SystemPage({ toast }) {
   return <>
     <PageTitle
       title="Sistema"
-      subtitle="Stato dell'app, accesso da smartphone, rete locale e informazioni di servizio."
-      icon={Activity}
+      desc="Stato dell'app, accesso da smartphone, rete locale e informazioni di servizio."
     />
 
     <div className="system-page-grid">
-      <Card title="Stato applicazione" icon={Server} sub="Backend locale e ambiente runtime.">
+      <Card title="Stato applicazione" icon={Settings2} sub="Backend locale e ambiente runtime.">
         <div className="system-kpi-grid">
-          <div><span>Edizione</span><b>{status.edition || '—'}</b></div>
+          <div><span>Edizione</span><b>{status.edition || 'Browser Edition'}</b></div>
           <div><span>Versione</span><b>{status.version || version.current_version || '—'}</b></div>
           <div><span>Porta</span><b>{status.port || '—'}</b></div>
           <div><span>Ora</span><b>{status.time || '—'}</b></div>
@@ -2988,22 +2988,22 @@ function SystemPage({ toast }) {
         </div>
 
         <div className="quick-actions">
-          <button className="ghost" onClick={refresh}><RefreshCw /> Aggiorna stato</button>
+          <button className="ghost" onClick={refresh}>Aggiorna stato</button>
         </div>
       </Card>
 
-      <Card title="Accesso mobile" icon={Smartphone} sub="Apri il gestionale da smartphone o tablet sulla stessa rete Wi-Fi.">
+      <Card title="Accesso mobile" icon={Settings2} sub="Apri il gestionale da smartphone o tablet sulla stessa rete Wi-Fi.">
         <div className="lan-access-box">
           <div>
             <span>Da questo PC</span>
             <b>{localUrl || '—'}</b>
-            <button className="ghost" onClick={() => copy(localUrl, 'Link locale copiato')}><Copy /> Copia</button>
+            <button className="ghost" onClick={() => copyText(localUrl, 'Link locale copiato')}>Copia</button>
           </div>
 
           <div>
             <span>Da smartphone / rete LAN</span>
             <b>{lanUrl || '—'}</b>
-            <button className="primary" onClick={() => copy(lanUrl, 'Link LAN copiato')}><Copy /> Copia link LAN</button>
+            <button className="primary" onClick={() => copyText(lanUrl, 'Link LAN copiato')}>Copia link LAN</button>
           </div>
         </div>
 
@@ -3013,7 +3013,7 @@ function SystemPage({ toast }) {
         </div>}
       </Card>
 
-      <Card title="Database locale" icon={Database} sub="Conteggio rapido dei dati principali salvati.">
+      <Card title="Database locale" icon={Settings2} sub="Conteggio rapido dei dati principali salvati.">
         <div className="system-counts">
           {Object.entries(status.db_counts || {}).map(([k, v]) => (
             <div key={k}>
@@ -3024,7 +3024,7 @@ function SystemPage({ toast }) {
         </div>
       </Card>
 
-      <Card title="Aggiornamenti" icon={DownloadCloud} sub="Base per il futuro update manager della Browser Edition.">
+      <Card title="Aggiornamenti" icon={Settings2} sub="Base per il futuro update manager della Browser Edition.">
         <div className="update-status-box">
           <div>
             <span>Canale</span>
@@ -3057,9 +3057,10 @@ function App() {
     { id: 'people', label: 'Clienti e fornitori', icon: Users },
     { id: 'setup', label: 'Categorie', icon: Tags },
     { id: 'report', label: 'Report', icon: BarChart3 },
+    { id: 'system', label: 'Sistema', icon: Settings2 },
     { id: 'settings', label: 'Impostazioni', icon: Settings2 },
   ];
-  const pages = { studio: Studio, atelier: Atelier, materials: Materials, products: Products, quote: Quote, sales: Sales, people: People, setup: Setup, report: Report, settings: SettingsPage };
+  const pages = { studio: Studio, atelier: Atelier, materials: Materials, products: Products, quote: Quote, sales: Sales, people: People, setup: Setup, report: Report, system: SystemPage, settings: SettingsPage };
   const Page = pages[tab] || Studio;
   function go(id) { setTab(id); localStorage.setItem('mnll_tab', id); setMobile(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   useEffect(() => { localStorage.setItem('mnll_theme', theme); document.documentElement.dataset.theme = theme; }, [theme]);
