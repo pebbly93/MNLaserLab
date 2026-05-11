@@ -1,7 +1,7 @@
 MN Laser Lab Manager - Browser Edition come servizio Windows
 ============================================================
 
-Questa versione avvia il gestionale in background all'avvio di Windows, senza mostrare finestre CMD.
+Questa versione avvia il gestionale in background all'accesso utente Windows, senza mostrare finestre CMD.
 
 INSTALLAZIONE
 -------------
@@ -14,10 +14,10 @@ INSTALLAZIONE
 3. Selezionare:
    Esegui come amministratore
 
-4. Il servizio viene installato tramite Utilità di pianificazione di Windows:
+4. Il servizio viene creato in Utilità di pianificazione:
    MN Laser Lab Manager Browser Service
 
-5. Il browser NON viene aperto automaticamente all'avvio.
+5. Il browser NON viene aperto automaticamente.
    Aprire manualmente:
    http://127.0.0.1:8000/
 
@@ -26,8 +26,13 @@ Da smartphone/tablet sulla stessa rete Wi-Fi:
 
 LOG
 ---
-I log sono in:
 %LOCALAPPDATA%\MN Laser Lab Manager\logs\browser_service.log
+
+TEST RAPIDO
+-----------
+Aprire PowerShell:
+Get-ScheduledTask | Where-Object {$_.TaskName -like "*MN Laser*"}
+Get-Content "$env:LOCALAPPDATA\MN Laser Lab Manager\logs\browser_service.log" -Tail 80
 
 RIMOZIONE
 ---------

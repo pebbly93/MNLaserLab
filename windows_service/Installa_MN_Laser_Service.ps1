@@ -13,12 +13,14 @@ if (!(Test-Path $Runner)) {
 
 $Action = New-ScheduledTaskAction `
   -Execute "powershell.exe" `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Runner`""
+  -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Runner`"" `
+  -WorkingDirectory "$ServiceDir"
 
-$Trigger = New-ScheduledTaskTrigger -AtStartup
+$Trigger = New-ScheduledTaskTrigger -AtLogOn
 
 $Principal = New-ScheduledTaskPrincipal `
-  -UserId "SYSTEM" `
+  -UserId $env:USERNAME `
+  -LogonType Interactive `
   -RunLevel Highest
 
 $Settings = New-ScheduledTaskSettingsSet `
@@ -39,13 +41,14 @@ Register-ScheduledTask `
   -Trigger $Trigger `
   -Principal $Principal `
   -Settings $Settings `
-  -Description "Avvia MN Laser Lab Manager Browser Edition in background all'avvio di Windows."
+  -Description "Avvia MN Laser Lab Manager Browser Edition in background all'accesso Windows."
 
 Start-ScheduledTask -TaskName $TaskName
 
 Write-Host ""
-Write-Host "Servizio installato e avviato in background." -ForegroundColor Green
-Write-Host "Task Scheduler: $TaskName"
-Write-Host "Apri l'app dal browser su: http://127.0.0.1:8000/"
-Write-Host "Da smartphone usa: http://IP_DEL_PC:8000/"
+Write-Host "MN Laser Lab Manager installato come attività nascosta all'accesso utente." -ForegroundColor Green
+Write-Host "Task: $TaskName"
+Write-Host "Apri manualmente: http://127.0.0.1:8000/"
+Write-Host "Da smartphone: http://IP_DEL_PC:8000/"
+Write-Host "Log: $env:LOCALAPPDATA\MN Laser Lab Manager\logs\browser_service.log"
 Write-Host ""

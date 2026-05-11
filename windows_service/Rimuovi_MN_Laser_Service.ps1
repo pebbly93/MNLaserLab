@@ -1,15 +1,13 @@
-$TaskName = "MN Laser Lab Browser Service"
+param(
+  [string]$TaskName = "MN Laser Lab Manager Browser Service"
+)
 
-try {
-    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+$ErrorActionPreference = "SilentlyContinue"
 
-    Write-Host ""
-    Write-Host "Servizio/background MN Laser Lab rimosso." -ForegroundColor Green
-    Write-Host ""
+if (Get-ScheduledTask -TaskName $TaskName) {
+  Stop-ScheduledTask -TaskName $TaskName
+  Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
+  Write-Host "Servizio rimosso: $TaskName" -ForegroundColor Green
+} else {
+  Write-Host "Servizio non trovato: $TaskName"
 }
-catch {
-    Write-Host "Errore rimozione servizio: $($_.Exception.Message)" -ForegroundColor Red
-}
-
-pause
