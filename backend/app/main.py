@@ -1268,24 +1268,6 @@ def browser_frontend_dist_dir():
 
 
 
-@app.get("/mn_laser_lab_logo.png")
-def browser_logo_png():
-    dist = browser_frontend_dist_dir()
-    if dist and (dist / "mn_laser_lab_logo.png").exists():
-        return FileResponse(dist / "mn_laser_lab_logo.png", media_type="image/png")
-
-    return Response("logo not found", status_code=404, media_type="text/plain")
-
-
-@app.get("/favicon.ico")
-def browser_favicon():
-    dist = browser_frontend_dist_dir()
-    if dist and (dist / "favicon.ico").exists():
-        return FileResponse(dist / "favicon.ico", media_type="image/x-icon")
-
-    return Response(status_code=204)
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -1464,46 +1446,164 @@ def mn_find_public_file(filename):
     return None
 
 
+
+
+
+
+# ---------------------------------------------------------------------------
+# v42.2.2 - Safe logo and system APIs before SPA fallback
+# ---------------------------------------------------------------------------
+
+@app.get("/api/system/version")
+def mn_system_version_api_safe():
+    return {
+        "ok": True,
+        "current_version": "42.2.2",
+        "channel": "browser-edition",
+        "automatic_updates": False,
+        "message": "Aggiornamenti automatici non ancora attivi. Usa il pacchetto Browser Edition aggiornato dalla release GitHub.",
+    }
+
+
+@app.get("/api/system/status")
+def mn_system_status_api_safe():
+    import os
+    import sys
+    import socket
+    import platform
+    from datetime import datetime
+
+    def get_lan_ip():
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    db = load_db()
+    port = int(os.environ.get("MN_BACKEND_PORT", "8000"))
+    lan_ip = get_lan_ip()
+
+    return {
+        "ok": True,
+        "app": "MN Laser Lab Manager",
+        "edition": "Browser Edition",
+        "version": "42.2.2",
+        "time": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "python": sys.version.split()[0],
+        "platform": platform.platform(),
+        "cwd": os.getcwd(),
+        "port": port,
+        "local_url": f"http://127.0.0.1:{port}/",
+        "lan_ip": lan_ip,
+        "lan_url": f"http://{lan_ip}:{port}/",
+        "db_counts": {
+            "materials": len(db.get("materials", {}) or {}),
+            "components": len(db.get("components", {}) or {}),
+            "products": len(db.get("products", {}) or {}),
+            "quotes": len(db.get("quotes", []) or []),
+            "customers": len(db.get("customers", {}) or {}),
+            "suppliers": len(db.get("suppliers", {}) or {}),
+            "sales": len(db.get("sales", []) or []),
+        },
+    }
+
+
+def mn_logo_svg_response():
+    from fastapi.responses import Response
+
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+      <rect width="120" height="120" rx="28" fill="#ffffff"/>
+      <circle cx="60" cy="60" r="45" fill="none" stroke="#0f172a" stroke-width="4" opacity=".16"/>
+      <path d="M24 72V43h12l12 16 12-16h12v34H60V60L50 73h-5L36 60v17H24z" fill="#0f172a"/>
+      <path d="M76 43h22v11H88v23H76z" fill="#058482"/>
+      <path d="M30 86c15 8 48 8 62-2" fill="none" stroke="#058482" stroke-width="6" stroke-linecap="round"/>
+    </svg>"""
+
+    return Response(
+        svg,
+        media_type="image/svg+xml",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+
+
+
+# ---------------------------------------------------------------------------
+# v42.2.4 - Force real PNG logo
+# ---------------------------------------------------------------------------
+
+def mn_real_png_logo_path():
+    from pathlib import Path
+    import sys
+
+    here = Path(__file__).resolve()
+
+    candidates = [
+        here.parents[2] / "frontend" / "public" / "mn_laser_lab_logo.png",
+        here.parents[2] / "frontend" / "dist" / "mn_laser_lab_logo.png",
+        here.parents[2] / "desktop" / "assets" / "mn_laser_lab_logo.png",
+        Path.cwd() / "frontend" / "public" / "mn_laser_lab_logo.png",
+        Path.cwd() / "frontend" / "dist" / "mn_laser_lab_logo.png",
+        Path.cwd() / "desktop" / "assets" / "mn_laser_lab_logo.png",
+    ]
+
+    if hasattr(sys, "_MEIPASS"):
+        candidates += [
+            Path(sys._MEIPASS) / "frontend" / "dist" / "mn_laser_lab_logo.png",
+            Path(sys._MEIPASS) / "frontend" / "public" / "mn_laser_lab_logo.png",
+            Path(sys._MEIPASS) / "desktop" / "assets" / "mn_laser_lab_logo.png",
+        ]
+
+    for p in candidates:
+        try:
+            if p.exists() and p.is_file() and p.stat().st_size > 100:
+                return p
+        except Exception:
+            pass
+
+    return None
+
+
 @app.get("/mn_laser_lab_logo.png")
-def mn_logo_png():
+def mn_laser_lab_logo_real_png():
     from fastapi.responses import FileResponse, Response
 
-    p = mn_find_public_file("mn_laser_lab_logo.png")
+    p = mn_real_png_logo_path()
     if p:
-        return FileResponse(p, media_type="image/png")
+        return FileResponse(
+            p,
+            media_type="image/png",
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+            },
+        )
 
-    return Response("logo not found", status_code=404, media_type="text/plain")
+    return Response("MN Laser Lab logo PNG not found", status_code=404, media_type="text/plain")
 
 
 @app.get("/logo.png")
-def mn_logo_png_alias():
-    from fastapi.responses import FileResponse, Response
-
-    p = mn_find_public_file("mn_laser_lab_logo.png") or mn_find_public_file("logo.png")
-    if p:
-        return FileResponse(p, media_type="image/png")
-
-    return Response("logo not found", status_code=404, media_type="text/plain")
-
-
-@app.get("/favicon.ico")
-def mn_favicon_ico():
-    from fastapi.responses import FileResponse, Response
-
-    p = mn_find_public_file("favicon.ico")
-    if p:
-        return FileResponse(p, media_type="image/x-icon")
-
-    return Response(status_code=204)
+def mn_laser_lab_logo_real_png_alias():
+    return mn_laser_lab_logo_real_png()
 
 
 @app.get("/api/debug/logo")
-def mn_debug_logo():
-    p = mn_find_public_file("mn_laser_lab_logo.png")
+def mn_laser_lab_logo_debug():
+    p = mn_real_png_logo_path()
     return {
         "ok": True,
-        "found": bool(p),
+        "real_logo_found": bool(p),
         "path": str(p) if p else None,
+        "mode": "real-png" if p else "missing",
+        "url": "/mn_laser_lab_logo.png",
     }
 
 @app.get("/{full_path:path}")
