@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import {
   AlertTriangle, Archive, ArrowRight, BarChart3, Boxes, Calculator, CheckCircle2,
@@ -204,7 +205,112 @@ function ErrorBox({ msg }) { return msg ? <div className="error"><AlertTriangle 
 function Empty({ text = 'Nessun dato' }) { return <div className="empty"><Sparkles /><b>{text}</b><span>Inserisci i primi dati o importa il database della versione desktop.</span></div>; }
 function Skeleton() { return <div className="skeleton"><i/><i/><i/></div>; }
 function SearchBox({ value, onChange, placeholder = 'Cerca...' }) { return <div className="search"><Search /><input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} /></div>; }
-function DataTable({ columns, rows, empty = 'Nessun risultato', meta = 'Dati aggiornati dal database', rowClassName }) { return <div className="table-card"><div className="table-meta"><b>{rows.length} righe</b><span>{meta}</span></div><div className="table-wrap"><table><thead><tr>{columns.map(c => <th key={c.key}>{c.label}</th>)}</tr></thead><tbody>{rows.length ? rows.map((r, i) => <tr className={rowClassName ? rowClassName(r, i) : ''} key={r._key || r.key || r.name || i}>{columns.map(c => <td key={c.key} data-label={c.label}>{c.render ? c.render(r, i) : r[c.key]}</td>)}</tr>) : <tr><td colSpan={columns.length}><Empty text={empty}/></td></tr>}</tbody></table></div></div>; }
+function DataTable({ columns, rows, empty = 'Nessun risultato', meta = 'Dati aggiornati dal database', rowClassName }) {
+  const [mobileActions, setMobileActions] = useState(null);
+
+  const actionCol = columns.find(c => {
+    const key = String(c.key || '').toLowerCase();
+    const label = String(c.label || '').toLowerCase();
+    return key === 'actions' || key === 'azioni' || label.includes('azioni');
+  });
+
+  function isMobileTable() {
+    return typeof window !== 'undefined'
+      && window.matchMedia
+      && window.matchMedia('(max-width: 720px)').matches;
+  }
+
+  function openMobileActions(row, index, e) {
+    if (!actionCol || !isMobileTable()) return;
+
+    const target = e?.target;
+    if (target?.closest && target.closest('button,a,input,select,textarea,label')) return;
+
+    setMobileActions({ row, index });
+  }
+
+  function rowTitle(row) {
+    return row.name
+      || row.product
+      || row.preventivo
+      || row.quote
+      || row.customer
+      || row.cliente
+      || row.date
+      || row.data
+      || 'Dettaglio riga';
+  }
+
+  const summaryCols = columns.filter(c => c !== actionCol);
+
+  const mobileModal = mobileActions && actionCol && typeof document !== 'undefined'
+    ? createPortal(
+      <div className="mobile-row-action-backdrop">
+        <div className="mobile-row-action-sheet">
+          <div className="mobile-row-action-head">
+            <div>
+              <span>Dettaglio riga</span>
+              <b>{rowTitle(mobileActions.row)}</b>
+            </div>
+            <button type="button" className="ghost" onClick={() => setMobileActions(null)} aria-label="Chiudi dettaglio">×</button>
+          </div>
+
+          <div className="mobile-row-action-summary">
+            {summaryCols.map(c => <div key={c.key}>
+              <span>{c.label}</span>
+              <b>{c.render ? c.render(mobileActions.row, mobileActions.index) : mobileActions.row[c.key]}</b>
+            </div>)}
+          </div>
+
+          <div className="mobile-row-action-buttons">
+            {actionCol.render
+              ? actionCol.render(mobileActions.row, mobileActions.index)
+              : mobileActions.row[actionCol.key]}
+          </div>
+        </div>
+      </div>,
+      document.body
+    )
+    : null;
+
+  return <>
+    <div className="table-card">
+      <div className="table-meta">
+        <b>{rows.length} righe</b>
+        <span>{meta}</span>
+        {actionCol && <small className="mobile-table-hint">Tocca una riga per aprire dettaglio e azioni.</small>}
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {columns.map(c => <th key={c.key} className={c === actionCol ? 'table-actions-head' : ''}>{c.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? rows.map((r, i) => <tr
+              className={`${rowClassName ? rowClassName(r, i) : ''} ${actionCol ? 'has-mobile-actions' : ''}`}
+              key={r._key || r.key || r.name || i}
+              onClick={e => openMobileActions(r, i, e)}
+            >
+              {columns.map(c => <td
+                key={c.key}
+                data-label={c.label}
+                className={c === actionCol ? 'table-actions-cell' : ''}
+              >
+                {c.render ? c.render(r, i) : r[c.key]}
+              </td>)}
+            </tr>) : <tr><td colSpan={columns.length}><Empty text={empty}/></td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {mobileModal}
+  </>;
+}
+
 function InventoryBadge({ item }) { const status = item?.inventory_status || 'da_verificare'; const label = item?.inventory_badge || 'da verificare'; return <span className={`inventory-badge ${status}`}>{label}</span>; }
 function inventoryRowClass(r) { return `inventory-row ${r?.inventory_status || 'da_verificare'}`; }
 const inventoryFilterLabel = {
